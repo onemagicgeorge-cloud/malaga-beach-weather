@@ -21,17 +21,13 @@ spain_tz = zoneinfo.ZoneInfo("Europe/Madrid")
 spain_now = datetime.datetime.now(spain_tz)
 current_hour = spain_now.hour
 
-# Визначаємо час доби та перевіряємо, чи потрібно публікувати
-if 6 <= current_hour < 9:
+# Визначаємо час доби
+if 5 <= current_hour < 12:
     time_of_day = "morning"
-elif 11 <= current_hour < 14:
+elif 12 <= current_hour < 18:
     time_of_day = "midday"
-elif 18 <= current_hour < 21:
-    time_of_day = "evening"
 else:
-    # Поза розкладом — виходимо без помилки
-    print(f"Not posting time (hour {current_hour}). Exiting.")
-    sys.exit(0)
+    time_of_day = "evening"
 
 # --- URL-и ---
 OPEN_METEO_URL = (
