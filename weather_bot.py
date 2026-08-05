@@ -27,7 +27,7 @@ OPEN_METEO_URL = (
 
 GEMINI_URL = (
     "https://generativelanguage.googleapis.com/v1beta/"
-    "models/gemini-2.0-flash:generateContent"
+    "models/gemini-1.5-flash:generateContent"
     f"?key={GEMINI_API_KEY}"
 )
 
