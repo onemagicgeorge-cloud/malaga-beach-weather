@@ -126,16 +126,20 @@ def generate_fallback_message(d):
     code_desc = WEATHER_CODES.get(c["weathercode"], f"Код {c['weathercode']}")
     tod = d["time_of_day"]
 
+    # Загальний блок з водою та хвилями
+    water_block = ""
+    if d.get("water_now") is not None:
+        water_block = f"🌊 Вода: {d['water_now']}°C"
+        if d.get("wave_now") is not None:
+            water_block += f", хвилі: {d['wave_now']} м"
+        water_block += "\n"
+
     if tod == "morning":
         msg = f"🌅 {BEACH_NAME} — доброго ранку!\n\n"
         msg += f"🌡 Зараз: {c['temperature']}°C\n"
         msg += f"💨 Вітер: {c['windspeed']} км/год\n"
         msg += f"🌤 {code_desc}\n"
-        if d.get("water_now") is not None:
-            msg += f"🌊 Вода: {d['water_now']}°C"
-            if d.get("wave_now") is not None:
-                msg += f", хвилі: {d['wave_now']} м"
-            msg += "\n"
+        msg += water_block
         if d.get("uv_today") is not None:
             uv = d["uv_today"]
             uv_note = "низький" if uv <= 2 else "помірний" if uv <= 5 else "високий" if uv <= 7 else "дуже високий" if uv <= 10 else "екстремальний"
@@ -150,11 +154,7 @@ def generate_fallback_message(d):
         msg += f"🌡 Зараз: {c['temperature']}°C\n"
         msg += f"💨 Вітер: {c['windspeed']} км/год\n"
         msg += f"🌤 {code_desc}\n"
-        if d.get("water_now") is not None:
-            msg += f"🌊 Вода: {d['water_now']}°C"
-            if d.get("wave_now") is not None:
-                msg += f", хвилі: {d['wave_now']} м"
-            msg += "\n"
+        msg += water_block
         if d.get("uv_today") is not None:
             uv = d["uv_today"]
             uv_note = "низький" if uv <= 2 else "помірний" if uv <= 5 else "високий" if uv <= 7 else "дуже високий" if uv <= 10 else "екстремальний"
@@ -170,6 +170,7 @@ def generate_fallback_message(d):
         msg += f"🌡 Зараз: {c['temperature']}°C\n"
         msg += f"💨 Вітер: {c['windspeed']} км/год\n"
         msg += f"🌤 {code_desc}\n"
+        msg += water_block
         if d.get("tomorrow"):
             t = d["tomorrow"]
             t_code = WEATHER_CODES.get(t["code"], "?")
@@ -186,17 +187,21 @@ def generate_ai_message(d):
     c = d["current"]
     tod = d["time_of_day"]
 
+    water_info = ""
+    if d.get("water_now") is not None:
+        water_info = f"Вода: {d['water_now']}°C"
+        if d.get("wave_now") is not None:
+            water_info += f", хвилі: {d['wave_now']} м"
+        water_info += "\n"
+
     if tod == "morning":
         prompt = (
             "Ти — дружній пляжний експерт. Напиши ранкове повідомлення "
             f"українською (до 400 символів) для пляжу {BEACH_NAME}.\n"
             f"Зараз: {c['temperature']}°C, вітер {c['windspeed']} км/год, "
             f"код погоди {c['weathercode']}\n"
+            f"{water_info}"
         )
-        if d.get("water_now") is not None:
-            prompt += f"Вода: {d['water_now']}°C\n"
-        if d.get("wave_now") is not None:
-            prompt += f"Хвилі: {d['wave_now']} м\n"
         if d.get("uv_today") is not None:
             prompt += f"UV сьогодні: {d['uv_today']} (0-2=низький, 3-5=помірний, 6-7=високий, 8+=дуже високий)\n"
         prompt += "Погодинний прогноз на сьогодні (вибірково):\n"
@@ -213,11 +218,8 @@ def generate_ai_message(d):
             f"українською (до 350 символів) для пляжу {BEACH_NAME}.\n"
             f"Зараз: {c['temperature']}°C, вітер {c['windspeed']} км/год, "
             f"код погоди {c['weathercode']}\n"
+            f"{water_info}"
         )
-        if d.get("water_now") is not None:
-            prompt += f"Вода: {d['water_now']}°C\n"
-        if d.get("wave_now") is not None:
-            prompt += f"Хвилі: {d['wave_now']} м\n"
         if d.get("uv_today") is not None:
             prompt += f"UV: {d['uv_today']} (0-2=низький, 3-5=помірний, 6-7=високий, 8+=дуже високий)\n"
         prompt += "Прогноз на другу половину дня:\n"
@@ -234,6 +236,7 @@ def generate_ai_message(d):
             f"українською (до 350 символів) для пляжу {BEACH_NAME}.\n"
             f"Зараз: {c['temperature']}°C, вітер {c['windspeed']} км/год, "
             f"код погоди {c['weathercode']}\n"
+            f"{water_info}"
         )
         if d.get("tomorrow"):
             t = d["tomorrow"]
