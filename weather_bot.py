@@ -13,7 +13,7 @@ BEACH_NAME = "Playa Guadalhorce"
 TELEGRAM_TOKEN = os.environ["BOT_TOKEN"]
 CHANNEL_ID = os.environ["CHANNEL_ID"]
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-AEMET_API_KEY = os.environ["AEMET_API_KEY"]
+AEMET_API_KEY = os.environ.get("AEMET_API_KEY", "")
 
 OPEN_METEO_URL = (
     f"https://api.open-meteo.com/v1/forecast?"
