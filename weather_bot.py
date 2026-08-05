@@ -5,9 +5,9 @@ import requests
 import datetime
 
 # ==================== НАЛАШТУВАННЯ ====================
-LATITUDE = 36.6665
+LATITUDE = 36.6657
 LONGITUDE = -4.4534
-BEACH_NAME = "Пляж Малагуета"
+BEACH_NAME = "Playa Guadalhorce"
 # =====================================================
 
 TELEGRAM_TOKEN = os.environ["BOT_TOKEN"]
