@@ -42,7 +42,7 @@ OPEN_METEO_URL = (
 
 GEMINI_URL = (
     "https://generativelanguage.googleapis.com/v1beta/"
-    "models/gemini-1.5-flash:generateContent"
+    "models/gemini-2.0-flash:generateContent"
     f"?key={GEMINI_API_KEY}"
 )
 
@@ -54,7 +54,7 @@ WEATHER_CODES = {
 
 
 def fetch_aemet_waves():
-    """Отримує хвилі через AEMET API (двоетапний запит)."""
+    """Отримує опис хвиль через AEMET API (двоетапний запит)."""
     if not AEMET_API_KEY:
         print("AEMET: no API key")
         return None
@@ -86,13 +86,23 @@ def fetch_aemet_waves():
             return None
 
         playa_data = res2.json()
-        today_str = datetime.date.today().strftime("%Y-%m-%d")
+        today_str = datetime.date.today().strftime("%Y%m%d")  # AEMET формат: 20260805
+
+        # Шукаємо прогноз на сьогодні
         for pred in playa_data:
-            fecha = pred.get("fecha", "")
-            if fecha == today_str:
-                waves = pred.get("sww_max")
-                if waves is not None:
-                    return waves
+            prediccion = pred.get("prediccion", {})
+            for dia in prediccion.get("dia", []):
+                fecha = str(dia.get("fecha", ""))
+                if fecha == today_str:
+                    oleaje = dia.get("oleaje", {})
+                    desc1 = oleaje.get("descripcion1", "")
+                    # Перекладаємо опис українською
+                    traducciones = {
+                        "débil": "слабкі 🌊",
+                        "moderado": "помірні 🌊🌊",
+                        "fuerte": "сильні 🌊🌊🌊"
+                    }
+                    return traducciones.get(desc1, desc1)
         return None
     except Exception as e:
         print(f"AEMET exception: {e}")
@@ -152,6 +162,7 @@ def fetch_all_data():
 
             uv_today = daily.get("uv_index_max", [None])[0]
 
+            # Отримуємо хвилі з AEMET
             wave_aemet = fetch_aemet_waves()
 
             return {
@@ -183,7 +194,7 @@ def generate_fallback_message(d):
     if d.get("water_now") is not None:
         water_block = f"🌊 Вода: {d['water_now']}°C"
         if d.get("wave_now") is not None:
-            water_block += f", хвилі: {d['wave_now']} м"
+            water_block += f", хвилі: {d['wave_now']}"
         water_block += "\n"
 
     hourly = d.get("hourly_forecast", [])
@@ -282,7 +293,7 @@ def generate_ai_message(d):
     if d.get("water_now") is not None:
         water_info = f"Вода: {d['water_now']}°C"
         if d.get("wave_now") is not None:
-            water_info += f", хвилі: {d['wave_now']} м"
+            water_info += f", хвилі: {d['wave_now']}"
         water_info += "\n"
 
     if tod == "morning":
@@ -394,7 +405,7 @@ def main():
 
     print(f"Temp: {d['current']['temperature']}°C")
     if d.get("wave_now") is not None:
-        print(f"Waves (AEMET): {d['wave_now']} m")
+        print(f"Waves (AEMET): {d['wave_now']}")
     else:
         print("Waves: no data")
 
