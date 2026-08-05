@@ -3,6 +3,7 @@ import sys
 import time
 import requests
 import datetime
+import zoneinfo
 
 # ==================== НАЛАШТУВАННЯ ====================
 LATITUDE = 36.6657
@@ -10,11 +11,29 @@ LONGITUDE = -4.4534
 BEACH_NAME = "Playa Guadalhorce"
 # =====================================================
 
-TELEGRAM_TOKEN = os.environ["BOT_TOKEN"]
-CHANNEL_ID = os.environ["CHANNEL_ID"]
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-AEMET_API_KEY = os.environ.get("AEMET_API_KEY", "")
+TELEGRAM_TOKEN = os.environ.get("BOT_TOKEN", "")
+CHANNEL_ID = os.environ.get("CHANNEL_ID", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+AEMET_API_KEY = os.environ.get("AEMET_API_KEY", "").strip()
 
+# --- Час ---
+spain_tz = zoneinfo.ZoneInfo("Europe/Madrid")
+spain_now = datetime.datetime.now(spain_tz)
+current_hour = spain_now.hour
+
+# Визначаємо час доби та перевіряємо, чи потрібно публікувати
+if 6 <= current_hour < 9:
+    time_of_day = "morning"
+elif 11 <= current_hour < 14:
+    time_of_day = "midday"
+elif 18 <= current_hour < 21:
+    time_of_day = "evening"
+else:
+    # Поза розкладом — виходимо без помилки
+    print(f"Not posting time (hour {current_hour}). Exiting.")
+    sys.exit(0)
+
+# --- URL-и ---
 OPEN_METEO_URL = (
     f"https://api.open-meteo.com/v1/forecast?"
     f"latitude={LATITUDE}&longitude={LONGITUDE}"
@@ -31,9 +50,6 @@ GEMINI_URL = (
     f"?key={GEMINI_API_KEY}"
 )
 
-# AEMET: координати поруч з Малагою (у морі)
-AEMET_BEACH_ID = "5429"  # код пляжу в системі AEMET — спробуємо універсальний підхід
-
 WEATHER_CODES = {
     0: "Ясно ☀️", 1: "Малохмарно 🌤", 2: "Хмарно ⛅",
     3: "Похмуро ☁️", 45: "Туман 🌫", 51: "Мряка 🌧",
@@ -42,37 +58,42 @@ WEATHER_CODES = {
 
 
 def fetch_aemet_waves():
-    """Отримує хвилі через AEMET API (безкоштовно)."""
-    # Крок 1: отримуємо URL даних для узбережжя Малаги
+    """Отримує хвилі через AEMET API (двоетапний запит)."""
+    if not AEMET_API_KEY:
+        print("AEMET: no API key")
+        return None
+
     coast_url = (
         "https://opendata.aemet.es/opendata/api/prediccion/especifica/playa/"
         f"5429001/?api_key={AEMET_API_KEY}"
     )
     try:
-        resp = requests.get(coast_url, timeout=10)
-        if resp.status_code != 200:
-            print(f"AEMET coast error: {resp.status_code}")
+        # Крок 1: отримуємо URL даних
+        res1 = requests.get(coast_url, headers={"cache-control": "no-cache"}, timeout=10)
+        if res1.status_code != 200:
+            print(f"AEMET step1 error: {res1.status_code}")
             return None
-        data = resp.json()
-        data_url = data.get("datos")
+        data1 = res1.json()
+        if data1.get("estado") != 200:
+            print(f"AEMET estado: {data1.get('estado')}")
+            return None
+
+        data_url = data1.get("datos")
         if not data_url:
             print("AEMET: no data URL")
             return None
 
-        # Крок 2: отримуємо власне дані
-        resp2 = requests.get(data_url, timeout=10)
-        if resp2.status_code != 200:
-            print(f"AEMET data error: {resp2.status_code}")
+        # Крок 2: отримуємо дані
+        res2 = requests.get(data_url, headers={"cache-control": "no-cache"}, timeout=10)
+        if res2.status_code != 200:
+            print(f"AEMET step2 error: {res2.status_code}")
             return None
 
-        playa_data = resp2.json()
-
-        # Шукаємо прогноз на сьогодні
+        playa_data = res2.json()
         today_str = datetime.date.today().strftime("%Y-%m-%d")
         for pred in playa_data:
             fecha = pred.get("fecha", "")
             if fecha == today_str:
-                # Хвилі: sww_max (висота хвиль у метрах)
                 waves = pred.get("sww_max")
                 if waves is not None:
                     return waves
@@ -93,14 +114,14 @@ def fetch_all_data():
             hourly = data.get("hourly", {})
             daily = data.get("daily", {})
 
-            now = datetime.datetime.now(datetime.timezone.utc)
-            current_hour = now.hour
+            now_utc = datetime.datetime.now(datetime.timezone.utc)
+            current_hour_utc = now_utc.hour
 
             times = hourly.get("time", [])
             water_temps = hourly.get("sea_surface_temperature", [])
 
             water_now = None
-            target_time = now.strftime("%Y-%m-%dT%H:00")
+            target_time = now_utc.strftime("%Y-%m-%dT%H:00")
             for i, t in enumerate(times):
                 if t == target_time:
                     if i < len(water_temps):
@@ -108,9 +129,9 @@ def fetch_all_data():
                     break
 
             if water_now is None and water_temps:
-                water_now = water_temps[min(current_hour, len(water_temps)-1)]
+                water_now = water_temps[min(current_hour_utc, len(water_temps)-1)]
 
-            today_str = now.strftime("%Y-%m-%d")
+            today_str = now_utc.strftime("%Y-%m-%d")
             hourly_forecast = []
             for i, t in enumerate(times):
                 if t.startswith(today_str):
@@ -120,7 +141,7 @@ def fetch_all_data():
                         hour_code = hourly["weathercode"][i] if i < len(hourly["weathercode"]) else None
                         hourly_forecast.append({"hour": h, "temp": hour_temp, "code": hour_code})
 
-            tomorrow_date = (now + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+            tomorrow_date = (now_utc + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
             tomorrow_forecast = None
             daily_times = daily.get("time", [])
             for i, t in enumerate(daily_times):
@@ -135,14 +156,6 @@ def fetch_all_data():
 
             uv_today = daily.get("uv_index_max", [None])[0]
 
-            if 5 <= current_hour < 12:
-                time_of_day = "morning"
-            elif 12 <= current_hour < 17:
-                time_of_day = "midday"
-            else:
-                time_of_day = "evening"
-
-            # Пробуємо отримати хвилі з AEMET
             wave_aemet = fetch_aemet_waves()
 
             return {
@@ -336,6 +349,7 @@ def generate_ai_message(d):
         "generationConfig": {"temperature": 0.7, "maxOutputTokens": 300}
     }
 
+    # Retry-логіка з backoff для Gemini 429
     for attempt in range(3):
         try:
             resp = requests.post(GEMINI_URL, json=data, timeout=20)
@@ -345,8 +359,8 @@ def generate_ai_message(d):
                 print(f"Gemini OK on attempt {attempt+1}")
                 return text.strip()
             elif resp.status_code == 429:
-                wait = (attempt + 1) * 10
-                print(f"Gemini 429 — retry in {wait}s")
+                wait = 5 * (attempt + 1)
+                print(f"Gemini 429 — retry in {wait}s (attempt {attempt+1}/3)")
                 time.sleep(wait)
             else:
                 print(f"Gemini error {resp.status_code}: {resp.text[:100]}")
@@ -354,7 +368,7 @@ def generate_ai_message(d):
         except Exception as e:
             print(f"Gemini attempt {attempt+1}: {e}")
             if attempt < 2:
-                time.sleep(10)
+                time.sleep(5 * (attempt + 1))
     return None
 
 
@@ -374,13 +388,15 @@ def send_telegram_message(text):
 
 
 def main():
-    print("=== Beach Weather Bot ===")
+    print(f"=== Beach Weather Bot ===")
+    print(f"Spain time: {spain_now.strftime('%H:%M')}, Time of day: {time_of_day}")
+
     d = fetch_all_data()
     if not d:
         print("FAIL: no data")
         sys.exit(1)
 
-    print(f"Time of day: {d['time_of_day']}, Temp: {d['current']['temperature']}°C")
+    print(f"Temp: {d['current']['temperature']}°C")
     if d.get("wave_now") is not None:
         print(f"Waves (AEMET): {d['wave_now']} m")
     else:
