@@ -6,9 +6,9 @@ import datetime
 import zoneinfo
 
 # ==================== НАЛАШТУВАННЯ ====================
-LATITUDE = 36.6657
-LONGITUDE = -4.4534
-BEACH_NAME = "Playa Guadalhorce"
+LATITUDE = 36.7200
+LONGITUDE = -4.4100
+BEACH_NAME = "Playa de la Malagueta"
 AEMET_PLAYA_ID = "2906707"
 # =====================================================
 
