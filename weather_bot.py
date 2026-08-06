@@ -9,12 +9,11 @@ import zoneinfo
 LATITUDE = 36.6657
 LONGITUDE = -4.4534
 BEACH_NAME = "Playa Guadalhorce"
-AEMET_PLAYA_ID = "2906707"  # La Malagueta, Málaga
+AEMET_PLAYA_ID = "2906707"
 # =====================================================
 
 TELEGRAM_TOKEN = os.environ.get("BOT_TOKEN", "")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 AEMET_API_KEY = os.environ.get("AEMET_API_KEY", "").strip()
 
 spain_tz = zoneinfo.ZoneInfo("Europe/Madrid")
@@ -35,12 +34,6 @@ OPEN_METEO_URL = (
     f"&hourly=temperature_2m,weathercode,wind_speed_10m,uv_index"
     f"&daily=temperature_2m_max,temperature_2m_min,weathercode,uv_index_max"
     f"&timezone=auto&forecast_days=2"
-)
-
-GEMINI_URL = (
-    "https://generativelanguage.googleapis.com/v1beta/"
-    "models/gemini-2.5-flash:generateContent"
-    f"?key={GEMINI_API_KEY}"
 )
 
 WEATHER_CODES = {
@@ -168,97 +161,55 @@ def uv_label(val):
         return f"{val} (екстремальний)"
 
 
-def build_fallback(d):
+def build_message(d):
     c = d["current"]
     cd = WEATHER_CODES.get(c["code"], f"Код {c['code']}")
     tod = d["time_of_day"]
-
-    wave_str = f", хвилі: {d['waves']}" if d.get("waves") else ""
+    wave_str = f"🌊 Хвилі: {d['waves']}\n" if d.get("waves") else ""
 
     if tod == "morning":
         msg = f"🌅 {BEACH_NAME} — доброго ранку!\n\n"
-        msg += f"🌡 {c['temp']}°C, 💨 {c['wind']} км/год, 🌤 {cd}\n"
+        msg += f"🌡 Температура: {c['temp']}°C\n"
+        msg += f"💨 Вітер: {c['wind']} км/год\n"
+        msg += f"🌤 Небо: {cd}\n"
         if d.get("uv_today"):
-            msg += f"☀️ UV: {uv_label(d['uv_today'])}\n"
-        if wave_str:
-            msg += f"🌊{wave_str}\n"
-        msg += "\n📋 Погодинно:\n"
+            msg += f"☀️ UV сьогодні: {uv_label(d['uv_today'])}\n"
+        msg += wave_str
+        msg += "\n📋 Погодинний прогноз:\n"
         for h in d["hourly"][::2]:
             hc = WEATHER_CODES.get(h["code"], "?")
-            msg += f"  {h['hour']:02d}:00  {h['temp']}°C  {hc}  💨{h.get('wind','?')} км/год  ☀️UV{h.get('uv','?')}\n"
+            msg += f"  {h['hour']:02d}:00 | {h['temp']}°C | {hc} | 💨{h.get('wind','?')} км/год | ☀️UV {h.get('uv','?')}\n"
 
     elif tod == "midday":
         msg = f"☀️ {BEACH_NAME} — день!\n\n"
-        msg += f"🌡 {c['temp']}°C, 💨 {c['wind']} км/год, 🌤 {cd}\n"
+        msg += f"🌡 Температура: {c['temp']}°C\n"
+        msg += f"💨 Вітер: {c['wind']} км/год\n"
+        msg += f"🌤 Небо: {cd}\n"
         if d.get("uv_today"):
-            msg += f"☀️ UV: {uv_label(d['uv_today'])}\n"
-        if wave_str:
-            msg += f"🌊{wave_str}\n"
+            msg += f"☀️ UV зараз: {uv_label(d['uv_today'])}\n"
+        msg += wave_str
         msg += "\n📋 Друга половина дня:\n"
         for h in d["hourly"]:
             if h["hour"] >= 12:
                 hc = WEATHER_CODES.get(h["code"], "?")
-                msg += f"  {h['hour']:02d}:00  {h['temp']}°C  {hc}  💨{h.get('wind','?')} км/год  ☀️UV{h.get('uv','?')}\n"
+                msg += f"  {h['hour']:02d}:00 | {h['temp']}°C | {hc} | 💨{h.get('wind','?')} км/год | ☀️UV {h.get('uv','?')}\n"
 
     else:
         msg = f"🌙 {BEACH_NAME} — добрий вечір!\n\n"
-        msg += f"🌡 {c['temp']}°C, 💨 {c['wind']} км/год, 🌤 {cd}\n"
-        if wave_str:
-            msg += f"🌊{wave_str}\n"
+        msg += f"🌡 Температура: {c['temp']}°C\n"
+        msg += f"💨 Вітер: {c['wind']} км/год\n"
+        msg += f"🌤 Небо: {cd}\n"
+        msg += wave_str
         if d.get("tomorrow"):
             t = d["tomorrow"]
             tc = WEATHER_CODES.get(t["code"], "?")
-            msg += f"\n📋 Завтра: {t['tmin']}…{t['tmax']}°C, {tc}, UV {uv_label(t.get('uv'))}\n"
+            msg += f"\n📋 Прогноз на завтра:\n"
+            msg += f"  🌡 {t['tmin']}…{t['tmax']}°C\n"
+            msg += f"  🌤 {tc}\n"
+            msg += f"  ☀️ UV: {uv_label(t.get('uv'))}\n"
 
     msg += "\n⚠️ Перевірте прапори на пляжі!"
     return msg
-
-
-def build_ai_message(d):
-    c = d["current"]
-    tod = d["time_of_day"]
-    wave_str = f", хвилі: {d['waves']}" if d.get("waves") else ""
-
-    if tod == "morning":
-        prompt = f"Ти — пляжний експерт. Ранкове повідомлення українською (до 500 символів). Пляж: {BEACH_NAME}. Зараз: {c['temp']}°C, вітер {c['wind']} км/год, код {c['code']}{wave_str}. UV сьогодні: {d.get('uv_today','?')}. Прогноз:\n"
-        for h in d["hourly"][::3]:
-            prompt += f"  {h['hour']}:00 — {h['temp']}°C, вітер {h.get('wind','?')}, UV {h.get('uv','?')}, код {h['code']}\n"
-        prompt += "Дай вердикт: чи йти на пляж, коли купатися, чи потрібен крем. Почни з привітання. Додай прапори. Емодзі."
-    elif tod == "midday":
-        prompt = f"Ти — пляжний експерт. Денне повідомлення українською (до 450 символів). Пляж: {BEACH_NAME}. Зараз: {c['temp']}°C, вітер {c['wind']} км/год, код {c['code']}{wave_str}. UV: {d.get('uv_today','?')}. Друга половина дня:\n"
-        for h in d["hourly"]:
-            if h["hour"] >= 12:
-                prompt += f"  {h['hour']}:00 — {h['temp']}°C, вітер {h.get('wind','?')}, UV {h.get('uv','?')}, код {h['code']}\n"
-        prompt += "Оціни умови для купання до вечора, UV-захист. Почни з «Добрий день!». Емодзі."
-    else:
-        prompt = f"Ти — пляжний експерт. Вечірнє повідомлення українською (до 450 символів). Пляж: {BEACH_NAME}. Зараз: {c['temp']}°C, вітер {c['wind']} км/год, код {c['code']}{wave_str}."
-        if d.get("tomorrow"):
-            t = d["tomorrow"]
-            prompt += f" Завтра: {t['tmin']}…{t['tmax']}°C, код {t['code']}, UV {t.get('uv','?')}."
-        prompt += " Опиши вечір, ніч, перспективи на завтра. Почни з «Добрий вечір!». Емодзі."
-
-    data = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.7, "maxOutputTokens": 500}
-    }
-
-    for attempt in range(3):
-        try:
-            r = requests.post(GEMINI_URL, json=data, timeout=20)
-            if r.status_code == 200:
-                return r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-            elif r.status_code == 429:
-                wait = 5 * (attempt + 1)
-                print(f"Gemini 429 — wait {wait}s")
-                time.sleep(wait)
-            else:
-                print(f"Gemini error {r.status_code}")
-                return None
-        except Exception as e:
-            print(f"Gemini attempt {attempt+1}: {e}")
-            if attempt < 2:
-                time.sleep(5 * (attempt + 1))
-    return None
 
 
 def send_telegram(text):
@@ -285,11 +236,7 @@ def main():
 
     print(f"Temp: {d['current']['temp']}°C, Waves: {d.get('waves', 'no')}")
 
-    msg = build_ai_message(d) or build_fallback(d)
-    if not msg:
-        print("FAIL: empty message")
-        sys.exit(1)
-
+    msg = build_message(d)
     if not send_telegram(msg):
         print("FAIL: send")
         sys.exit(1)
