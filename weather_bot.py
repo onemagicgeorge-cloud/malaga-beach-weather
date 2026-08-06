@@ -53,11 +53,11 @@ WEATHER_CODES = {
 }
 
 
-def fetch_aemet_data():
-    """Отримує дані про хвилі, воду, UV з AEMET (двоетапний запит)."""
+def fetch_aemet_waves():
+    """Отримує опис хвиль через AEMET API (двоетапний запит)."""
     if not AEMET_API_KEY:
         print("AEMET: no API key")
-        return {}
+        return None
 
     coast_url = (
         "https://opendata.aemet.es/opendata/api/prediccion/especifica/playa/"
@@ -67,42 +67,42 @@ def fetch_aemet_data():
         res1 = requests.get(coast_url, headers={"cache-control": "no-cache"}, timeout=10)
         if res1.status_code != 200:
             print(f"AEMET step1 error: {res1.status_code}")
-            return {}
+            return None
         data1 = res1.json()
         if data1.get("estado") != 200:
             print(f"AEMET estado: {data1.get('estado')}")
-            return {}
+            return None
 
         data_url = data1.get("datos")
         if not data_url:
-            return {}
+            print("AEMET: no data URL")
+            return None
 
         res2 = requests.get(data_url, headers={"cache-control": "no-cache"}, timeout=10)
         if res2.status_code != 200:
-            return {}
+            print(f"AEMET step2 error: {res2.status_code}")
+            return None
 
         playa_data = res2.json()
         today_str = datetime.date.today().strftime("%Y%m%d")
 
         for pred in playa_data:
-            for dia in pred.get("prediccion", {}).get("dia", []):
-                if str(dia.get("fecha", "")) == today_str:
-                    oleaje = dia.get("oleaje", {}).get("descripcion1", "")
+            prediccion = pred.get("prediccion", {})
+            for dia in prediccion.get("dia", []):
+                fecha = str(dia.get("fecha", ""))
+                if fecha == today_str:
+                    oleaje = dia.get("oleaje", {})
+                    desc1 = oleaje.get("descripcion1", "")
                     traducciones = {
                         "débil": "слабкі 🌊",
                         "moderado": "помірні 🌊🌊",
                         "fuerte": "сильні 🌊🌊🌊"
                     }
-                    return {
-                        "wave_desc": traducciones.get(oleaje, oleaje),
-                        "water_temp_aemet": dia.get("tAgua", {}).get("valor1"),
-                        "uv_max_aemet": dia.get("uvMax", {}).get("valor1"),
-                        "sensacion": dia.get("sTermica", {}).get("descripcion1", "")
-                    }
-        return {}
+                    return traducciones.get(desc1, desc1)
+        return None
     except Exception as e:
         print(f"AEMET exception: {e}")
-        return {}
+        return None
 
 
 def fetch_all_data():
@@ -117,12 +117,13 @@ def fetch_all_data():
             daily = data.get("daily", {})
 
             now_utc = datetime.datetime.now(datetime.timezone.utc)
+            current_hour_utc = now_utc.hour
 
             times = hourly.get("time", [])
-            wind_speeds = hourly.get("wind_speed_10m", [])
-            temps_hourly = hourly.get("temperature_2m", [])
-            codes_hourly = hourly.get("weathercode", [])
-            uv_hourly = hourly.get("uv_index", [])
+            temps = hourly.get("temperature_2m", [])
+            codes = hourly.get("weathercode", [])
+            winds = hourly.get("wind_speed_10m", [])
+            uvs = hourly.get("uv_index", [])
 
             today_str = now_utc.strftime("%Y-%m-%d")
             hourly_forecast = []
@@ -132,15 +133,16 @@ def fetch_all_data():
                     if 6 <= h <= 23:
                         hourly_forecast.append({
                             "hour": h,
-                            "temp": temps_hourly[i] if i < len(temps_hourly) else None,
-                            "code": codes_hourly[i] if i < len(codes_hourly) else None,
-                            "wind": wind_speeds[i] if i < len(wind_speeds) else None,
-                            "uv": uv_hourly[i] if i < len(uv_hourly) else None
+                            "temp": temps[i] if i < len(temps) else None,
+                            "code": codes[i] if i < len(codes) else None,
+                            "wind": winds[i] if i < len(winds) else None,
+                            "uv": uvs[i] if i < len(uvs) else None
                         })
 
             tomorrow_date = (now_utc + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
             tomorrow_forecast = None
-            for i, t in enumerate(daily.get("time", [])):
+            daily_times = daily.get("time", [])
+            for i, t in enumerate(daily_times):
                 if t == tomorrow_date:
                     tomorrow_forecast = {
                         "temp_max": daily["temperature_2m_max"][i] if i < len(daily["temperature_2m_max"]) else None,
@@ -152,7 +154,7 @@ def fetch_all_data():
 
             uv_today = daily.get("uv_index_max", [None])[0]
 
-            aemet = fetch_aemet_data()
+            wave_aemet = fetch_aemet_waves()
 
             return {
                 "current": {
@@ -160,10 +162,7 @@ def fetch_all_data():
                     "windspeed": current["windspeed"],
                     "weathercode": current["weathercode"]
                 },
-                "wave_desc": aemet.get("wave_desc"),
-                "water_temp_aemet": aemet.get("water_temp_aemet"),
-                "uv_max_aemet": aemet.get("uv_max_aemet"),
-                "sensacion": aemet.get("sensacion"),
+                "wave_now": wave_aemet,
                 "water_now": None,
                 "uv_today": uv_today,
                 "hourly_forecast": hourly_forecast,
@@ -183,30 +182,34 @@ def generate_fallback_message(d):
     tod = d["time_of_day"]
 
     water_block = ""
-    water_temp = d.get("water_temp_aemet")
-    if water_temp is not None:
-        water_block = f"🌊 Вода: {water_temp}°C"
-        if d.get("wave_desc"):
-            water_block += f", хвилі: {d['wave_desc']}"
+    if d.get("water_now") is not None:
+        water_block = f"🌊 Вода: {d['water_now']}°C"
+    if d.get("wave_now") is not None:
+        if water_block:
+            water_block += ", "
+        else:
+            water_block = "🌊 "
+        water_block += f"хвилі: {d['wave_now']}"
+    if water_block:
         water_block += "\n"
 
     hourly = d.get("hourly_forecast", [])
     trend_text = ""
     if len(hourly) >= 3:
-        temps = [h["temp"] for h in hourly if h["temp"] is not None]
-        codes = [h["code"] for h in hourly if h["code"] is not None]
-        if temps:
-            if max(temps) - min(temps) <= 3:
+        temps_list = [h["temp"] for h in hourly if h["temp"] is not None]
+        codes_list = [h["code"] for h in hourly if h["code"] is not None]
+        if temps_list:
+            if max(temps_list) - min(temps_list) <= 3:
                 temp_trend = "температура стабільна"
-            elif temps[-1] > temps[0]:
+            elif temps_list[-1] > temps_list[0]:
                 temp_trend = "потеплішає"
             else:
                 temp_trend = "похолоднішає"
-            if codes:
-                sunny = sum(1 for c in codes if c in [0, 1])
-                cloudy = sum(1 for c in codes if c in [2, 3])
-                rainy = sum(1 for c in codes if c in [51, 61, 95])
-                if rainy > len(codes)//2:
+            if codes_list:
+                sunny = sum(1 for c in codes_list if c in [0, 1])
+                cloudy = sum(1 for c in codes_list if c in [2, 3])
+                rainy = sum(1 for c in codes_list if c in [51, 61, 95])
+                if rainy > len(codes_list)//2:
                     weather_trend = "очікується дощова погода"
                 elif cloudy > sunny:
                     weather_trend = "буде хмарно"
@@ -216,16 +219,14 @@ def generate_fallback_message(d):
                     weather_trend = "мінлива хмарність"
                 trend_text = f"📊 Загалом: {weather_trend}, {temp_trend}\n"
 
-    uv_val = d.get("uv_max_aemet") or d.get("uv_today")
-
     if tod == "morning":
         msg = f"🌅 {BEACH_NAME} — доброго ранку!\n\n"
         msg += f"🌡 Зараз: {c['temperature']}°C\n"
         msg += f"💨 Вітер: {c['windspeed']} км/год\n"
         msg += f"🌤 {code_desc}\n"
         msg += water_block
-        if uv_val is not None:
-            uv = float(uv_val)
+        if d.get("uv_today") is not None:
+            uv = d["uv_today"]
             uv_note = "низький" if uv <= 2 else "помірний" if uv <= 5 else "високий" if uv <= 7 else "дуже високий" if uv <= 10 else "екстремальний"
             msg += f"☀️ UV: {uv} ({uv_note})\n"
         if trend_text:
@@ -233,13 +234,12 @@ def generate_fallback_message(d):
         msg += "\n📋 Погодинно:\n"
         for h in hourly[::2]:
             h_code = WEATHER_CODES.get(h["code"], "?")
-            line = f"  {h['hour']:02d}:00 — {h['temp']}°C, {h_code}"
+            msg += f"  {h['hour']:02d}:00 — {h['temp']}°C, {h_code}"
             if h.get("wind") is not None:
-                line += f", 💨{h['wind']} км/год"
+                msg += f", 💨{h['wind']} км/год"
             if h.get("uv") is not None:
-                line += f", ☀️UV{h['uv']}"
-            line += "\n"
-            msg += line
+                msg += f", ☀️UV{h['uv']}"
+            msg += "\n"
 
     elif tod == "midday":
         msg = f"☀️ {BEACH_NAME} — день!\n\n"
@@ -247,8 +247,8 @@ def generate_fallback_message(d):
         msg += f"💨 Вітер: {c['windspeed']} км/год\n"
         msg += f"🌤 {code_desc}\n"
         msg += water_block
-        if uv_val is not None:
-            uv = float(uv_val)
+        if d.get("uv_today") is not None:
+            uv = d["uv_today"]
             uv_note = "низький" if uv <= 2 else "помірний" if uv <= 5 else "високий" if uv <= 7 else "дуже високий" if uv <= 10 else "екстремальний"
             msg += f"☀️ UV: {uv} ({uv_note})\n"
         afternoon = [h for h in hourly if h["hour"] >= 12]
@@ -265,13 +265,12 @@ def generate_fallback_message(d):
         for h in hourly:
             if h["hour"] >= 12:
                 h_code = WEATHER_CODES.get(h["code"], "?")
-                line = f"  {h['hour']:02d}:00 — {h['temp']}°C, {h_code}"
+                msg += f"  {h['hour']:02d}:00 — {h['temp']}°C, {h_code}"
                 if h.get("wind") is not None:
-                    line += f", 💨{h['wind']} км/год"
+                    msg += f", 💨{h['wind']} км/год"
                 if h.get("uv") is not None:
-                    line += f", ☀️UV{h['uv']}"
-                line += "\n"
-                msg += line
+                    msg += f", ☀️UV{h['uv']}"
+                msg += "\n"
 
     else:
         msg = f"🌙 {BEACH_NAME} — добрий вечір!\n\n"
@@ -284,7 +283,7 @@ def generate_fallback_message(d):
             t_code = WEATHER_CODES.get(t["code"], "?")
             msg += f"\n📋 Завтра: {t['temp_min']}…{t['temp_max']}°C, {t_code}\n"
             if t.get("uv") is not None:
-                uv = float(t["uv"])
+                uv = t["uv"]
                 uv_note = "низький" if uv <= 2 else "помірний" if uv <= 5 else "високий" if uv <= 7 else "дуже високий" if uv <= 10 else "екстремальний"
                 msg += f"☀️ UV завтра: {uv} ({uv_note})\n"
 
@@ -297,57 +296,73 @@ def generate_ai_message(d):
     tod = d["time_of_day"]
 
     water_info = ""
-    water_temp = d.get("water_temp_aemet")
-    if water_temp is not None:
-        water_info = f"Вода: {water_temp}°C"
-        if d.get("wave_desc"):
-            water_info += f", хвилі: {d['wave_desc']}"
+    if d.get("water_now") is not None:
+        water_info = f"Вода: {d['water_now']}°C"
+    if d.get("wave_now") is not None:
+        if water_info:
+            water_info += ", "
+        water_info += f"хвилі: {d['wave_now']}"
+    if water_info:
         water_info += "\n"
 
     if tod == "morning":
         prompt = (
             "Ти — дружній пляжний експерт. Напиши ранкове повідомлення "
-            f"українською (до 400 символів) для пляжу {BEACH_NAME}.\n"
+            f"українською (до 500 символів) для пляжу {BEACH_NAME}.\n"
             f"Зараз: {c['temperature']}°C, вітер {c['windspeed']} км/год, "
-            f"код погоди {c['weathercode']}\n{water_info}"
+            f"код погоди {c['weathercode']}\n"
+            f"{water_info}"
         )
-        uv_val = d.get("uv_max_aemet") or d.get("uv_today")
-        if uv_val is not None:
-            prompt += f"UV: {uv_val}\n"
-        prompt += "Погодинний прогноз:\n"
+        if d.get("uv_today") is not None:
+            prompt += f"UV сьогодні: {d['uv_today']} (0-2=низький, 3-5=помірний, 6-7=високий, 8+=дуже високий)\n"
+        prompt += "Погодинний прогноз на сьогодні (температура, вітер, UV):\n"
         for h in d.get("hourly_forecast", [])[::3]:
-            prompt += f"  {h['hour']}:00 — {h['temp']}°C, код {h['code']}, вітер {h.get('wind','?')} км/год, UV {h.get('uv','?')}\n"
-        prompt += "Дай вердикт. Почни з привітання. Використовуй емодзі."
+            prompt += f"  {h['hour']}:00 — {h['temp']}°C, вітер {h.get('wind','?')} км/год, UV {h.get('uv','?')}, код {h['code']}\n"
+        prompt += (
+            "Дай вердикт: чи йти на пляж сьогодні, коли найкраще купатися, "
+            "чи потрібен крем. Почни з привітання та назви пляжу. Додай "
+            "нагадування про прапори. Використовуй емодзі."
+        )
     elif tod == "midday":
         prompt = (
             "Ти — дружній пляжний експерт. Напиши денне повідомлення "
-            f"українською (до 350 символів) для пляжу {BEACH_NAME}.\n"
+            f"українською (до 450 символів) для пляжу {BEACH_NAME}.\n"
             f"Зараз: {c['temperature']}°C, вітер {c['windspeed']} км/год, "
-            f"код погоди {c['weathercode']}\n{water_info}"
+            f"код погоди {c['weathercode']}\n"
+            f"{water_info}"
         )
-        uv_val = d.get("uv_max_aemet") or d.get("uv_today")
-        if uv_val is not None:
-            prompt += f"UV: {uv_val}\n"
-        prompt += "Друга половина дня:\n"
+        if d.get("uv_today") is not None:
+            prompt += f"UV: {d['uv_today']} (0-2=низький, 3-5=помірний, 6-7=високий, 8+=дуже високий)\n"
+        prompt += "Прогноз на другу половину дня (температура, вітер, UV):\n"
         for h in d.get("hourly_forecast", []):
             if h["hour"] >= 12:
-                prompt += f"  {h['hour']}:00 — {h['temp']}°C, код {h['code']}, вітер {h.get('wind','?')} км/год, UV {h.get('uv','?')}\n"
-        prompt += "Оціни умови. Почни з «Добрий день!». Використовуй емодзі."
+                prompt += f"  {h['hour']}:00 — {h['temp']}°C, вітер {h.get('wind','?')} км/год, UV {h.get('uv','?')}, код {h['code']}\n"
+        prompt += (
+            "Оціни умови для купання зараз і до вечора. Порадь щодо UV-захисту. "
+            "Почни з «Добрий день!» та назви пляжу. Використовуй емодзі."
+        )
     else:
         prompt = (
             "Ти — дружній пляжний експерт. Напиши вечірнє повідомлення "
-            f"українською (до 350 символів) для пляжу {BEACH_NAME}.\n"
+            f"українською (до 450 символів) для пляжу {BEACH_NAME}.\n"
             f"Зараз: {c['temperature']}°C, вітер {c['windspeed']} км/год, "
-            f"код погоди {c['weathercode']}\n{water_info}"
+            f"код погоди {c['weathercode']}\n"
+            f"{water_info}"
         )
         if d.get("tomorrow"):
             t = d["tomorrow"]
-            prompt += f"Завтра: {t['temp_min']}…{t['temp_max']}°C, код {t['code']}, UV {t.get('uv','?')}\n"
-        prompt += "Опиши вечір і завтра. Почни з «Добрий вечір!». Використовуй емодзі."
+            prompt += (
+                f"Прогноз на завтра: {t['temp_min']}…{t['temp_max']}°C, "
+                f"код {t['code']}, UV {t.get('uv', '?')}\n"
+            )
+        prompt += (
+            "Опиши поточну погоду, прогноз на ніч, перспективи на завтра "
+            "для пляжу. Почни з «Добрий вечір!» та назви пляжу. Використовуй емодзі."
+        )
 
     data = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.7, "maxOutputTokens": 300}
+        "generationConfig": {"temperature": 0.7, "maxOutputTokens": 500}
     }
 
     for attempt in range(3):
@@ -363,7 +378,7 @@ def generate_ai_message(d):
                 print(f"Gemini 429 — retry in {wait}s")
                 time.sleep(wait)
             else:
-                print(f"Gemini error {resp.status_code}")
+                print(f"Gemini error {resp.status_code}: {resp.text[:100]}")
                 return None
         except Exception as e:
             print(f"Gemini attempt {attempt+1}: {e}")
@@ -397,8 +412,8 @@ def main():
         sys.exit(1)
 
     print(f"Temp: {d['current']['temperature']}°C")
-    if d.get("wave_desc"):
-        print(f"Waves (AEMET): {d['wave_desc']}")
+    if d.get("wave_now") is not None:
+        print(f"Waves (AEMET): {d['wave_now']}")
     else:
         print("Waves: no data")
 
