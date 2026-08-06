@@ -165,7 +165,10 @@ def build_message(d):
     c = d["current"]
     cd = WEATHER_CODES.get(c["code"], f"Код {c['code']}")
     tod = d["time_of_day"]
-    wave_str = f"🌊 Хвилі: {d['waves']}\n" if d.get("waves") else ""
+    wave_val = d.get("waves")
+
+    wave_line = f"🌊 Хвилі сьогодні: {wave_val}\n" if wave_val else ""
+    wave_short = f" | 🌊{wave_val}" if wave_val else ""
 
     if tod == "morning":
         msg = f"🌅 {BEACH_NAME} — доброго ранку!\n\n"
@@ -174,11 +177,11 @@ def build_message(d):
         msg += f"🌤 Небо: {cd}\n"
         if d.get("uv_today"):
             msg += f"☀️ UV сьогодні: {uv_label(d['uv_today'])}\n"
-        msg += wave_str
+        msg += wave_line
         msg += "\n📋 Погодинний прогноз:\n"
         for h in d["hourly"][::2]:
             hc = WEATHER_CODES.get(h["code"], "?")
-            msg += f"  {h['hour']:02d}:00 | {h['temp']}°C | {hc} | 💨{h.get('wind','?')} км/год | ☀️UV {h.get('uv','?')}\n"
+            msg += f"  {h['hour']:02d}:00 | {h['temp']}°C | {hc} | 💨{h.get('wind','?')} км/год | ☀️UV {h.get('uv','?')}{wave_short}\n"
 
     elif tod == "midday":
         msg = f"☀️ {BEACH_NAME} — день!\n\n"
@@ -187,19 +190,19 @@ def build_message(d):
         msg += f"🌤 Небо: {cd}\n"
         if d.get("uv_today"):
             msg += f"☀️ UV зараз: {uv_label(d['uv_today'])}\n"
-        msg += wave_str
+        msg += wave_line
         msg += "\n📋 Друга половина дня:\n"
         for h in d["hourly"]:
             if h["hour"] >= 12:
                 hc = WEATHER_CODES.get(h["code"], "?")
-                msg += f"  {h['hour']:02d}:00 | {h['temp']}°C | {hc} | 💨{h.get('wind','?')} км/год | ☀️UV {h.get('uv','?')}\n"
+                msg += f"  {h['hour']:02d}:00 | {h['temp']}°C | {hc} | 💨{h.get('wind','?')} км/год | ☀️UV {h.get('uv','?')}{wave_short}\n"
 
     else:
         msg = f"🌙 {BEACH_NAME} — добрий вечір!\n\n"
         msg += f"🌡 Температура: {c['temp']}°C\n"
         msg += f"💨 Вітер: {c['wind']} км/год\n"
         msg += f"🌤 Небо: {cd}\n"
-        msg += wave_str
+        msg += wave_line
         if d.get("tomorrow"):
             t = d["tomorrow"]
             tc = WEATHER_CODES.get(t["code"], "?")
@@ -208,7 +211,6 @@ def build_message(d):
             msg += f"  🌤 {tc}\n"
             msg += f"  ☀️ UV: {uv_label(t.get('uv'))}\n"
 
-    msg += "\n⚠️ Перевірте прапори на пляжі!"
     return msg
 
 
