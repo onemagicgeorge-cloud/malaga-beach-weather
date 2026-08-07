@@ -45,7 +45,6 @@ WEATHER_CODES = {
 
 
 def rnd(val):
-    """Округлення до цілого: 30.1→30, 30.5→31, 30.6→31."""
     if val is None:
         return None
     return int(math.floor(val + 0.5))
@@ -135,29 +134,28 @@ def get_all_data():
                         uv_now = uvs[i]
                         break
 
-            hourly_list = []
+            # Будуємо 24-годинний прогноз від поточної години
+            # Знаходимо індекс найближчої години (не раніше поточної)
+            start_index = None
             for i, t in enumerate(times):
-                if t.startswith(today_str):
-                    h = int(t.split("T")[1].split(":")[0])
-                    if 6 <= h <= 23:
-                        hourly_list.append({
-                            "hour": h,
-                            "temp": rnd(temps[i]) if i < len(temps) else None,
-                            "code": codes[i] if i < len(codes) else None,
-                            "wind": rnd(winds[i]) if i < len(winds) else None,
-                            "uv": rnd(uvs[i]) if i < len(uvs) else None
-                        })
-
-            tomorrow = None
-            for i, t in enumerate(daily.get("time", [])):
-                if t == tomorrow_str:
-                    tomorrow = {
-                        "tmax": rnd(daily["temperature_2m_max"][i]),
-                        "tmin": rnd(daily["temperature_2m_min"][i]),
-                        "code": daily["weathercode"][i],
-                        "uv": rnd(daily["uv_index_max"][i])
-                    }
+                if t >= target_time:
+                    start_index = i
                     break
+            if start_index is None:
+                start_index = 0
+
+            hourly_list = []
+            for i in range(start_index, min(start_index + 24, len(times))):
+                t = times[i]
+                h = int(t.split("T")[1].split(":")[0])
+                hourly_list.append({
+                    "hour": h,
+                    "temp": rnd(temps[i]) if i < len(temps) else None,
+                    "code": codes[i] if i < len(codes) else None,
+                    "wind": rnd(winds[i]) if i < len(winds) else None,
+                    "uv": rnd(uvs[i]) if i < len(uvs) else None,
+                    "water": rnd(sea_temps[i]) if i < len(sea_temps) and sea_temps[i] is not None else None
+                })
 
             waves = get_aemet_waves()
 
@@ -171,7 +169,6 @@ def get_all_data():
                 "uv_now": rnd(uv_now),
                 "waves": waves,
                 "hourly": hourly_list,
-                "tomorrow": tomorrow,
                 "time_of_day": time_of_day
             }
         except Exception as e:
@@ -210,46 +207,26 @@ def build_message(d):
 
     if tod == "morning":
         msg = f"🌅 {BEACH_NAME} — доброго ранку!\n\n"
-        msg += f"🌡 Температура: {c['temp']}°C\n"
-        msg += f"💨 Вітер: {c['wind']} км/год\n"
-        msg += f"🌤 Небо: {cd}\n"
-        msg += water_line
-        msg += uv_line
-        msg += wave_line
-        msg += "\n📋 Погодинний прогноз:\n"
-        for h in d["hourly"][::2]:
-            hc = WEATHER_CODES.get(h["code"], "?")
-            msg += f"  {h['hour']:02d}:00  {h['temp']}°C  {hc}  💨 {h.get('wind','?')} км/год  ☀️ UV {h.get('uv','?')}\n"
-
     elif tod == "midday":
         msg = f"☀️ {BEACH_NAME} — день!\n\n"
-        msg += f"🌡 Температура: {c['temp']}°C\n"
-        msg += f"💨 Вітер: {c['wind']} км/год\n"
-        msg += f"🌤 Небо: {cd}\n"
-        msg += water_line
-        msg += uv_line
-        msg += wave_line
-        msg += "\n📋 Друга половина дня:\n"
-        for h in d["hourly"]:
-            if h["hour"] >= 12:
-                hc = WEATHER_CODES.get(h["code"], "?")
-                msg += f"  {h['hour']:02d}:00  {h['temp']}°C  {hc}  💨 {h.get('wind','?')} км/год  ☀️ UV {h.get('uv','?')}\n"
-
     else:
         msg = f"🌙 {BEACH_NAME} — добрий вечір!\n\n"
-        msg += f"🌡 Температура: {c['temp']}°C\n"
-        msg += f"💨 Вітер: {c['wind']} км/год\n"
-        msg += f"🌤 Небо: {cd}\n"
-        msg += water_line
-        msg += uv_line
-        msg += wave_line
-        if d.get("tomorrow"):
-            t = d["tomorrow"]
-            tc = WEATHER_CODES.get(t["code"], "?")
-            msg += f"\n📋 Прогноз на завтра:\n"
-            msg += f"  🌡 {t['tmin']}…{t['tmax']}°C\n"
-            msg += f"  🌤 {tc}\n"
-            msg += f"  ☀️ UV: {uv_label(t.get('uv'))}\n"
+
+    # Блок "Погода зараз"
+    msg += "🔵 Погода зараз:\n"
+    msg += f"🌡 Температура: {c['temp']}°C\n"
+    msg += f"💨 Вітер: {c['wind']} км/год\n"
+    msg += f"🌤 Небо: {cd}\n"
+    msg += water_line
+    msg += uv_line
+    msg += wave_line
+
+    # Блок "Погодинний прогноз на 24 години"
+    msg += "\n📋 Погодинний прогноз (24 години):\n"
+    for h in d["hourly"]:
+        hc = WEATHER_CODES.get(h["code"], "?")
+        water_str = f" 🌊{h['water']}°C" if h.get("water") is not None else ""
+        msg += f"  {h['hour']:02d}:00  {h['temp']}°C  {hc}  💨 {h.get('wind','?')} км/год  ☀️ UV {h.get('uv','?')}{water_str}\n"
 
     return msg
 
