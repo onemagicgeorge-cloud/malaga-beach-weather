@@ -186,7 +186,6 @@ def build_message(d):
     water_val = d.get("water_temp")
 
     wave_line = f"🌊 Хвилі сьогодні: {wave_val}\n" if wave_val else ""
-    wave_short = f" | 🌊{wave_val}" if wave_val else ""
     water_line = f"🌊 Температура води: {water_val}°C\n" if water_val is not None else ""
 
     if tod == "morning":
@@ -201,7 +200,7 @@ def build_message(d):
         msg += "\n📋 Погодинний прогноз:\n"
         for h in d["hourly"][::2]:
             hc = WEATHER_CODES.get(h["code"], "?")
-            msg += f"  {h['hour']:02d}:00 | {h['temp']}°C | {hc} | 💨{h.get('wind','?')} км/год | ☀️UV {h.get('uv','?')}{wave_short}\n"
+            msg += f"  {h['hour']:02d}:00  {h['temp']}°C  {hc}  💨 {h.get('wind','?')} км/год  ☀️ UV {h.get('uv','?')}\n"
 
     elif tod == "midday":
         msg = f"☀️ {BEACH_NAME} — день!\n\n"
@@ -216,7 +215,7 @@ def build_message(d):
         for h in d["hourly"]:
             if h["hour"] >= 12:
                 hc = WEATHER_CODES.get(h["code"], "?")
-                msg += f"  {h['hour']:02d}:00 | {h['temp']}°C | {hc} | 💨{h.get('wind','?')} км/год | ☀️UV {h.get('uv','?')}{wave_short}\n"
+                msg += f"  {h['hour']:02d}:00  {h['temp']}°C  {hc}  💨 {h.get('wind','?')} км/год  ☀️ UV {h.get('uv','?')}\n"
 
     else:
         msg = f"🌙 {BEACH_NAME} — добрий вечір!\n\n"
