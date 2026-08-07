@@ -134,8 +134,7 @@ def get_all_data():
                         uv_now = uvs[i]
                         break
 
-            # Будуємо 24-годинний прогноз від поточної години
-            # Знаходимо індекс найближчої години (не раніше поточної)
+            # 24-годинний прогноз від поточної години
             start_index = None
             for i, t in enumerate(times):
                 if t >= target_time:
@@ -215,7 +214,7 @@ def build_message(d):
     # Блок "Погода зараз"
     msg += "🔵 Погода зараз:\n"
     msg += f"🌡 Температура: {c['temp']}°C\n"
-    msg += f"💨 Вітер: {c['wind']} км/год\n"
+    msg += f"💨 Вітер: {c['wind']}\n"
     msg += f"🌤 Небо: {cd}\n"
     msg += water_line
     msg += uv_line
@@ -225,8 +224,7 @@ def build_message(d):
     msg += "\n📋 Погодинний прогноз (24 години):\n"
     for h in d["hourly"]:
         hc = WEATHER_CODES.get(h["code"], "?")
-        water_str = f" 🌊{h['water']}°C" if h.get("water") is not None else ""
-        msg += f"  {h['hour']:02d}:00  {h['temp']}°C  {hc}  💨 {h.get('wind','?')} км/год  ☀️ UV {h.get('uv','?')}{water_str}\n"
+        msg += f"  {h['hour']:02d}:00  {h['temp']}°C  {hc}  💨 {h.get('wind','?')}  ☀️ UV {h.get('uv','?')}\n"
 
     return msg
 
