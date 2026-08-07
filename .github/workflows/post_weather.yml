@@ -2,7 +2,9 @@ name: Post Weather
 
 on:
   schedule:
-    - cron: '0 * * * *'   # щогодини
+    - cron: '0 5 * * *'
+    - cron: '0 10 * * *'
+    - cron: '0 18 * * *'
   workflow_dispatch:
 
 jobs:
@@ -22,6 +24,5 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           AEMET_API_KEY: ${{ secrets.AEMET_API_KEY }}
         run: python weather_bot.py
