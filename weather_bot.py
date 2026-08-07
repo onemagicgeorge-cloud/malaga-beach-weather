@@ -111,7 +111,7 @@ def get_all_data():
 
             # Поточна температура води
             water_now = None
-            target_time = now.strftime("%Y-%m-%dT%H:00")
+            target_time = spain_now.strftime("%Y-%m-%dT%H:00")
             for i, t in enumerate(times):
                 if t == target_time:
                     if i < len(sea_temps) and sea_temps[i] is not None:
