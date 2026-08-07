@@ -4,6 +4,7 @@ import time
 import requests
 import datetime
 import zoneinfo
+import math
 
 # ==================== НАЛАШТУВАННЯ ====================
 LATITUDE = 36.7200
@@ -41,6 +42,13 @@ WEATHER_CODES = {
     3: "Похмуро ☁️", 45: "Туман 🌫", 51: "Мряка 🌧",
     61: "Дощ 🌧", 71: "Сніг ❄️", 95: "Гроза ⛈"
 }
+
+
+def rnd(val):
+    """Округлення до цілого: 30.1→30, 30.5→31, 30.6→31."""
+    if val is None:
+        return None
+    return int(math.floor(val + 0.5))
 
 
 def get_aemet_waves():
@@ -115,14 +123,13 @@ def get_all_data():
                         water_now = sea_temps[i]
                         break
 
-            # Поточний UV (найближча година)
+            # Поточний UV
             uv_now = None
             for i, t in enumerate(times):
                 if t == target_time and i < len(uvs) and uvs[i] is not None:
                     uv_now = uvs[i]
                     break
             if uv_now is None and uvs:
-                # шукаємо найближче значення
                 for i, t in enumerate(times):
                     if t.startswith(today_str) and i < len(uvs) and uvs[i] is not None:
                         uv_now = uvs[i]
@@ -135,20 +142,20 @@ def get_all_data():
                     if 6 <= h <= 23:
                         hourly_list.append({
                             "hour": h,
-                            "temp": temps[i] if i < len(temps) else None,
+                            "temp": rnd(temps[i]) if i < len(temps) else None,
                             "code": codes[i] if i < len(codes) else None,
-                            "wind": winds[i] if i < len(winds) else None,
-                            "uv": uvs[i] if i < len(uvs) else None
+                            "wind": rnd(winds[i]) if i < len(winds) else None,
+                            "uv": rnd(uvs[i]) if i < len(uvs) else None
                         })
 
             tomorrow = None
             for i, t in enumerate(daily.get("time", [])):
                 if t == tomorrow_str:
                     tomorrow = {
-                        "tmax": daily["temperature_2m_max"][i],
-                        "tmin": daily["temperature_2m_min"][i],
+                        "tmax": rnd(daily["temperature_2m_max"][i]),
+                        "tmin": rnd(daily["temperature_2m_min"][i]),
                         "code": daily["weathercode"][i],
-                        "uv": daily["uv_index_max"][i]
+                        "uv": rnd(daily["uv_index_max"][i])
                     }
                     break
 
@@ -156,12 +163,12 @@ def get_all_data():
 
             return {
                 "current": {
-                    "temp": cur["temperature"],
-                    "wind": cur["windspeed"],
+                    "temp": rnd(cur["temperature"]),
+                    "wind": rnd(cur["windspeed"]),
                     "code": cur["weathercode"]
                 },
-                "water_temp": water_now,
-                "uv_now": uv_now,
+                "water_temp": rnd(water_now),
+                "uv_now": rnd(uv_now),
                 "waves": waves,
                 "hourly": hourly_list,
                 "tomorrow": tomorrow,
