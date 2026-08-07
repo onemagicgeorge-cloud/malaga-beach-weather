@@ -110,10 +110,22 @@ def get_all_data():
                         water_now = sea_temps[i]
                     break
             if water_now is None and sea_temps:
-                # беремо перше доступне значення за сьогодні
                 for i, t in enumerate(times):
                     if t.startswith(today_str) and i < len(sea_temps) and sea_temps[i] is not None:
                         water_now = sea_temps[i]
+                        break
+
+            # Поточний UV (найближча година)
+            uv_now = None
+            for i, t in enumerate(times):
+                if t == target_time and i < len(uvs) and uvs[i] is not None:
+                    uv_now = uvs[i]
+                    break
+            if uv_now is None and uvs:
+                # шукаємо найближче значення
+                for i, t in enumerate(times):
+                    if t.startswith(today_str) and i < len(uvs) and uvs[i] is not None:
+                        uv_now = uvs[i]
                         break
 
             hourly_list = []
@@ -140,7 +152,6 @@ def get_all_data():
                     }
                     break
 
-            uv_today = daily.get("uv_index_max", [None])[0]
             waves = get_aemet_waves()
 
             return {
@@ -150,8 +161,8 @@ def get_all_data():
                     "code": cur["weathercode"]
                 },
                 "water_temp": water_now,
+                "uv_now": uv_now,
                 "waves": waves,
-                "uv_today": uv_today,
                 "hourly": hourly_list,
                 "tomorrow": tomorrow,
                 "time_of_day": time_of_day
@@ -184,9 +195,11 @@ def build_message(d):
     tod = d["time_of_day"]
     wave_val = d.get("waves")
     water_val = d.get("water_temp")
+    uv_val = d.get("uv_now")
 
     wave_line = f"🌊 Хвилі сьогодні: {wave_val}\n" if wave_val else ""
     water_line = f"🌊 Температура води: {water_val}°C\n" if water_val is not None else ""
+    uv_line = f"☀️ UV зараз: {uv_label(uv_val)}\n" if uv_val is not None else ""
 
     if tod == "morning":
         msg = f"🌅 {BEACH_NAME} — доброго ранку!\n\n"
@@ -194,8 +207,7 @@ def build_message(d):
         msg += f"💨 Вітер: {c['wind']} км/год\n"
         msg += f"🌤 Небо: {cd}\n"
         msg += water_line
-        if d.get("uv_today"):
-            msg += f"☀️ UV сьогодні: {uv_label(d['uv_today'])}\n"
+        msg += uv_line
         msg += wave_line
         msg += "\n📋 Погодинний прогноз:\n"
         for h in d["hourly"][::2]:
@@ -208,8 +220,7 @@ def build_message(d):
         msg += f"💨 Вітер: {c['wind']} км/год\n"
         msg += f"🌤 Небо: {cd}\n"
         msg += water_line
-        if d.get("uv_today"):
-            msg += f"☀️ UV зараз: {uv_label(d['uv_today'])}\n"
+        msg += uv_line
         msg += wave_line
         msg += "\n📋 Друга половина дня:\n"
         for h in d["hourly"]:
@@ -223,6 +234,7 @@ def build_message(d):
         msg += f"💨 Вітер: {c['wind']} км/год\n"
         msg += f"🌤 Небо: {cd}\n"
         msg += water_line
+        msg += uv_line
         msg += wave_line
         if d.get("tomorrow"):
             t = d["tomorrow"]
@@ -257,7 +269,7 @@ def main():
         print("FAIL: no data")
         sys.exit(1)
 
-    print(f"Temp: {d['current']['temp']}°C, Water: {d.get('water_temp', '?')}°C, Waves: {d.get('waves', 'no')}")
+    print(f"Temp: {d['current']['temp']}°C, Water: {d.get('water_temp', '?')}°C, UV: {d.get('uv_now', '?')}, Waves: {d.get('waves', 'no')}")
 
     msg = build_message(d)
     if not send_telegram(msg):
