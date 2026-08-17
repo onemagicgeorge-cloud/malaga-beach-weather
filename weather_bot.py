@@ -18,7 +18,6 @@ AEMET_PLAYA_ID = "2906707"
 TELEGRAM_TOKEN = os.environ.get("BOT_TOKEN", "")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "")
 AEMET_API_KEY = os.environ.get("AEMET_API_KEY", "").strip()
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 spain_tz = zoneinfo.ZoneInfo("Europe/Madrid")
 spain_now = datetime.datetime.now(spain_tz)
@@ -334,76 +333,6 @@ def generate_commentary(d):
     return "\n".join(lines)
 
 
-# ==================== AI-ОПИС ПОГОДИ НА ДОБУ (GROQ) ====================
-
-def generate_ai_daily_description(d):
-    if not GROQ_API_KEY:
-        return None
-
-    c = d["current"]
-    hourly = d.get("hourly", [])
-    daily = d.get("daily", [])
-
-    # Build weather summary for AI
-    current_summary = (
-        f"Поточна погода: температура {c['temp']}°C (відчувається як {c.get('apparent', c['temp'])}°C), "
-        f"вітер {c['wind']} км/г {c['wind_dir']}, небо: {WEATHER_CODES.get(c['code'], 'невідомо')}, "
-        f"вода: {d.get('water_temp', '?')}°C, UV: {d.get('uv_now', '?')}, "
-        f"хвилі: {d.get('waves', 'невідомо')}, ймовірність дощу: {d.get('precip_now', '?')}%"
-    )
-
-    hourly_summary = "Погодинний прогноз:\n"
-    for h in hourly[:12]:  # Next 12 hours
-        hc = WEATHER_CODES.get(h.get("code"), "?")
-        hourly_summary += (
-            f"  {h['hour']:02d}:00 - {h['temp']}°C, {hc}, "
-            f"вітер {h.get('wind', '?')} км/г, "
-            f"дощ: {h.get('precip_prob', '?')}%, "
-            f"UV: {h.get('uv', '?')}\n"
-        )
-
-    prompt = f"""Ти — бот пляжного погоди в Малазі, Іспанія. Пиши українською мовою.
-Напиши короткий (3-5 речень) опис погоди на наступні 12 годин на пляжі Playa de la Malagueta.
-Будь креативним, дотепним, але корисним. Порадь, чи варто йти на пляж.
-Не використовуй емодзі. Пиши як розмовна людина.
-
-{current_summary}
-
-{hourly_summary}"""
-
-    try:
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": "openai/gpt-oss-20b",
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.7,
-            "max_tokens": 500
-        }
-        r = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=30
-        )
-        if r.status_code == 200:
-            data = r.json()
-            return data["choices"][0]["message"]["content"].strip()
-        else:
-            print(f"GROQ API error {r.status_code}: {r.text[:200]}")
-            return None
-    except Exception as e:
-        print(f"GROQ error: {e}")
-        return None
-
-
-# ==================== КІНЕЦЬ AI-КОМЕНТАРЯ ====================
-
-
 def get_aemet_waves():
     if not AEMET_API_KEY:
         return None
@@ -683,21 +612,14 @@ def build_message(d):
     msg += f"\n💬 Що я думаю про погоду:\n"
     msg += f"{commentary}\n"
 
-    # === AI-ОПИС ПОГОДИ НА ДОБУ (GROQ) ===
-    ai_desc = generate_ai_daily_description(d)
-    if ai_desc:
-        msg += f"\n🤖 AI-прогноз на добу:\n"
-        msg += f"{ai_desc}\n"
-
     # === ПОГОДИННИЙ ПРОГНОЗ (24 години) ===
     msg += "\n📋 Погодинний прогноз (24 години):\n"
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     for h in d["hourly"]:
         hc = WEATHER_CODES.get(h["code"], "?")
-        rain_str = f"💧{h['precip_prob']}%" if h.get('precip_prob') is not None else ""
         msg += (
             f"  {h['hour']:02d}:00 │ {h['temp']}°C │ {hc}\n"
-            f"           │ 💨 {h.get('wind','?')} {h.get('wind_dir','')} │ ☀️ UV {h.get('uv','?')} │ {rain_str}\n"
+            f"           │ 💨 {h.get('wind','?')} {h.get('wind_dir','')} │ ☀️ UV {h.get('uv','?')}\n"
         )
 
     # === 7-ДЕННИЙ ПРОГНОЗ ===
@@ -746,14 +668,6 @@ def main():
         sys.exit(1)
 
     print(f"Temp: {d['current']['temp']}°C, Water: {d.get('water_temp', '?')}°C, UV: {d.get('uv_now', '?')}, Waves: {d.get('waves', 'no')}")
-
-    # Test AI description
-    if GROQ_API_KEY:
-        ai_desc = generate_ai_daily_description(d)
-        if ai_desc:
-            print(f"\n=== AI Description ===\n{ai_desc}\n")
-        else:
-            print("AI description failed")
 
     msg = build_message(d)
     print(f"Message length: {len(msg)} chars")
