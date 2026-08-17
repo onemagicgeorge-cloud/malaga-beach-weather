@@ -230,6 +230,17 @@ def generate_commentary(d):
         hours_str = ", ".join(rain_hours[:3])
         lines.append(f"Увага: очікується дощ о {hours_str} 🌧️")
 
+    # --- Опис хвиль ---
+    if waves:
+        if "слабкі" in waves or "спокійн" in waves:
+            lines.append(f"Хвилі слабкі ({waves}) — ідеально для купання.")
+        elif "помірні" in waves:
+            lines.append(f"Хвилі помірні ({waves}) — обережно з малими дітьми.")
+        elif "сильні" in waves or "високі" in waves:
+            lines.append(f"Хвилі сильні ({waves}) — краще не заходити глибоко.")
+        else:
+            lines.append(f"Хвилі: {waves}.")
+
     # --- Зміни протягом доби ---
     if hourly:
         max_temp_h = max((h.get("temp", 0) for h in hourly), default=temp)
