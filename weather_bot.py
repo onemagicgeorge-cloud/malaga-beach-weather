@@ -183,86 +183,7 @@ def alerts(uv, wind_speed, waves_desc, precip_prob, weather_code, alerts_list):
         alerts_list.append("🌫 ТУМАН — обережно на воді")
 
 
-# ==================== AI-КОМЕНТАР ====================
-
-GOOD_WEATHER_INTRO = [
-    "Я тут посидів на піску, помацав градусник — і знаєш що? Сьогодні ідеальний день!",
-    "Привіт! Якщо ти зараз дивишся на це повідомлення замість того, щоб бути на пляжі — щось не так. Іди сюди!",
-    "Сьогодні навіть краби вийшли позасмагати. Приєднуйся!",
-    "Море шепоче: 'Приходь, тут класно!' І я з ним згоден.",
-    "Якщо погода — це усмішка, то сьогодні у Малаги — справжня посмішка від вуха до вуха!",
-    "Сьогодні тип погоди, заради якого варто було сюди переїхати.",
-]
-
-BAD_WEATHER_INTRO = [
-    "Ну... сьогодні не найкращий день для пляжу. Але хвилі все одно красиві!",
-    "Я тут на пляжі один. І, схоже, я тут не просто так — краще йди в інший день.",
-    "Сьогодні море в настрої 'не чіпай мене'. Краще подивись на нього з відстані.",
-    "Погода сьогодні така собі. Якщо хочеш — йди, але візьми парасолю. І здоровий глузд.",
-    "Хмари сьогодні серйозні. Я б на твоєму місці залишився вдома з кавою.",
-]
-
-UV_WARNINGS = [
-    "Тільки не забудь крем! UV сьогодні серйозний — навіть я засмагнув, а я бот!",
-    "Сонце сьогодні пече так, що навіть пісок червоний. SPF50 — must have!",
-    "Якщо ти не хочеш стати раком, нанеси крем. Я попередив!",
-    "UV-індекс високий. Сьогодні краще бути черепахою — під парасолею.",
-]
-
-WAVE_COMMENTS = [
-    "Хвилі сьогодні виходять на серйозний рівень. Серфери в захваті, а от мамам з дітьми — краще не ризикувати.",
-    "Море грає в 'хто кого'. Краще не вступай в цю гру.",
-    "Хвилі такі, що навіть риби тримаються за камені. Плавати — тільки в басейні.",
-]
-
-RAIN_COMMENTS = [
-    "Дощ сьогодні — не для тих, хто хоче засмагати. Зате для тих, хто любить романтику!",
-    "Якщо хочеш мокнути — не треба йти в душ. Просто вийди на пляж.",
-    "Дощ — це просто хмари, які плачуть, бо не можуть бути на пляжі.",
-]
-
-STORM_COMMENTS = [
-    "Гроза! Це не погода для пляжу — це погода для фільмів жахів!",
-    "Залишайся вдома. Серйозно. Я тобі кажу як той, хто вже бачив кілька штормів.",
-    "Блискавки + пляж = погана ідея. Залишайся в безпеці!",
-]
-
-MORNING_TIPS = [
-    "Ранок — найкращий час для пляжу. Пісок ще прохолодний, людей мало, і кава смакує краще біля моря.",
-    "Прокинувся? Збирайся! Поки інші сплять — ти можеш мати весь пляж для себе.",
-    "Ранкове сонце ніжне і тепле. Ідеальний час для прогулянки вздовж берега.",
-]
-
-MIDDAY_TIPS = [
-    "Обіднє сонце — найсильніше. Якщо ти вже на пляжі — шукай тінь або парасолю!",
-    "Середина дня — час для кокоса під парасолею. Або для сну. Або для обох.",
-    "Тепер найспекотніший час. Пий воду і не забувай про крем!",
-]
-
-EVENING_TIPS = [
-    "Вечір на пляжі — магія. Захід сонця, прохолодний бриз, і ніх не поспішає додому.",
-    "Золота година! Фотографи вже тут. А ти?",
-    "Вечірнє море — найромантичніше. Беріж цей момент.",
-]
-
-SEA_TEMP_COMMENTS = {
-    "cold": [
-        "Вода ще прохолодна — для справжніх закалених!",
-        "Море бадьорить! Якщо любиш прохолоду — це для тебе.",
-    ],
-    "cool": [
-        "Вода вже приємна для купання!",
-        "Ідеальна температура для того, щоб зануритись.",
-    ],
-    "warm": [
-        "Вода тепла — можна навіть без аквашузів!",
-        "Така вода — як ванна. Тільки більша. І з сіллю.",
-    ],
-    "hot": [
-        "Вода така тепла, що аж непристойно. Люблю це!",
-        "Вода прогріта ідеально. Час пірнати!",
-    ],
-}
+# ==================== КОМЕНТАР ДО ПОГОДИ ====================
 
 
 def generate_commentary(d):
@@ -270,66 +191,65 @@ def generate_commentary(d):
     temp = c.get("temp", 20)
     uv = d.get("uv_now", 0)
     wind = c.get("wind", 0)
+    wind_dir = c.get("wind_dir", "")
     waves = d.get("waves")
     precip = d.get("precip_now", 0)
     water = d.get("water_temp")
     tod = d.get("time_of_day", "midday")
     code = c.get("code", 0)
-    safety = beach_safety_score(uv, wind, waves, precip)
+    hourly = d.get("hourly", [])
 
     lines = []
 
-    # --- Intro ---
-    if safety[0] >= 70:
-        lines.append(random.choice(GOOD_WEATHER_INTRO))
-    elif safety[0] >= 40:
-        lines.append(random.choice(BAD_WEATHER_INTRO))
-    else:
-        lines.append(random.choice(BAD_WEATHER_INTRO))
+    # --- Коротко про зараз ---
+    sky_desc = WEATHER_CODES.get(code, "невідомо").split(" ")[0]
+    wind_level = wind_speed_level(wind)[1]
+    lines.append(f"Зараз у Малагі {sky_desc}, {temp}°C, вітер {wind} км/г ({wind_level}).")
 
-    # --- Time of day tip ---
-    if tod == "morning":
-        lines.append(random.choice(MORNING_TIPS))
-    elif tod == "midday":
-        lines.append(random.choice(MIDDAY_TIPS))
-    else:
-        lines.append(random.choice(EVENING_TIPS))
+    # --- Зміни протягом доби ---
+    if hourly:
+        max_temp_h = max((h.get("temp", 0) for h in hourly), default=temp)
+        min_temp_h = min((h.get("temp", 100) for h in hourly), default=temp)
+        max_wind_h = max((h.get("wind", 0) for h in hourly), default=wind)
+        max_uv_h = max((h.get("uv", 0) for h in hourly), default=uv or 0)
 
-    # --- UV warning ---
-    if uv is not None and uv >= 6:
-        lines.append(random.choice(UV_WARNINGS))
+        changes = []
 
-    # --- Wave comment ---
-    if waves and ("помірні" in waves or "сильні" in waves):
-        lines.append(random.choice(WAVE_COMMENTS))
+        if max_temp_h > temp + 2:
+            changes.append(f"температура підніметься до {max_temp_h}°C")
+        elif min_temp_h < temp - 3:
+            changes.append(f"температура опуститься до {min_temp_h}°C")
 
-    # --- Rain ---
-    if precip is not None and precip >= 50:
-        lines.append(random.choice(RAIN_COMMENTS))
+        if max_wind_h > wind + 15:
+            changes.append(f"вітер посилиться до {max_wind_h} км/г")
+        elif max_wind_h < wind - 5 and wind > 10:
+            changes.append("вітер стихне")
 
-    # --- Storm ---
-    if code is not None and code >= 95:
-        lines.append(random.choice(STORM_COMMENTS))
+        if max_uv_h >= 8:
+            changes.append(f"UV-індекс сягне {max_uv_h} (дуже високий)")
+        elif max_uv_h >= 6 and (uv or 0) < 6:
+            changes.append(f"UV-індекс зросте до {max_uv_h}")
 
-    # --- Sea temperature ---
-    if water is not None:
-        if water < 17:
-            lines.append(random.choice(SEA_TEMP_COMMENTS["cold"]))
-        elif water < 21:
-            lines.append(random.choice(SEA_TEMP_COMMENTS["cool"]))
-        elif water < 26:
-            lines.append(random.choice(SEA_TEMP_COMMENTS["warm"]))
+        if precip is not None and precip >= 50:
+            changes.append("ймовірність дощу")
+        elif any(h.get("precip_prob", 0) and h.get("precip_prob", 0) >= 50 for h in hourly[:6]):
+            changes.append("ближче до ночі можливий дощ")
+
+        if changes:
+            lines.append("Зміни: " + ", ".join(changes) + ".")
         else:
-            lines.append(random.choice(SEA_TEMP_COMMENTS["hot"]))
+            lines.append("Суттєвих змін протягом доби не очікується.")
 
-    # --- Fun facts ---
-    if temp is not None:
-        if temp >= 40:
-            lines.append("40+ градусів? Це не погода, це печенько в духовці!")
-        elif temp >= 35:
-            lines.append("35+ градусів — тут навіть мурахи шукають тінь!")
-        elif temp <= 5:
-            lines.append("5 градусів на пляжі? Може, краще в музей?")
+    # --- Порада ---
+    safety = beach_safety_score(uv, wind, waves, precip)
+    if safety[0] >= 80:
+        lines.append("Ідеальний день для пляжу — користуйся!")
+    elif safety[0] >= 60:
+        lines.append("Добре для пляжу, але будь уважний до змін.")
+    elif safety[0] >= 40:
+        lines.append("Не найкращий день — краще обмежити час на сонці.")
+    else:
+        lines.append("Краще не йти на пляж сьогодні.")
 
     return "\n".join(lines)
 
