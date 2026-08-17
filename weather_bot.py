@@ -40,6 +40,13 @@ OPEN_METEO_URL = (
     f"&timezone=auto&forecast_days=7"
 )
 
+MARINE_URL = (
+    f"https://marine-api.open-meteo.com/v1/marine?"
+    f"latitude={LATITUDE}&longitude={LONGITUDE}"
+    f"&hourly=wave_height,wave_period"
+    f"&timezone=auto&forecast_days=2"
+)
+
 WEATHER_CODES_SHORT = {
     0: "☀️", 1: "🌤", 2: "⛅",
     3: "☁️", 45: "🌫", 48: "🌫",
@@ -205,41 +212,31 @@ def generate_commentary(d):
     temp = c.get("temp", 20)
     uv = d.get("uv_now", 0)
     wind = c.get("wind", 0)
-    wind_dir = c.get("wind_dir", "")
-    waves = d.get("waves")
+    wave_now = d.get("wave_now")
     precip = d.get("precip_now", 0)
-    water = d.get("water_temp")
-    tod = d.get("time_of_day", "midday")
     code = c.get("code", 0)
     hourly = d.get("hourly", [])
+    wave_hourly = d.get("wave_hourly", [])
 
-    lines = []
+    parts = []
 
-    # --- Коротко про зараз ---
+    # --- Зараз ---
     sky_desc = WEATHER_CODES.get(code, "невідомо").split(" ")[0]
-    lines.append(f"Зараз {sky_desc.lower()}, {temp}°C, вітер {wind} км/г.")
+    parts.append(f"Зараз {sky_desc.lower()}, {temp}°C, вітер {wind} км/г")
 
-    # --- Авто-попередження про дощ ---
+    # --- Хвилі зараз ---
+    if wave_now is not None:
+        w_desc = wave_description(wave_now)
+        parts.append(f"хвилі {w_desc} ({wave_now} м)")
+
+    # --- Дощ ---
     rain_hours = []
     for h in hourly[:12]:
         pp = h.get("precip_prob")
         if pp is not None and pp > 20:
-            rain_hours.append(f"{h['hour']:02d}:00 ({pp}%)")
-
+            rain_hours.append(f"{h['hour']:02d}:00")
     if rain_hours:
-        hours_str = ", ".join(rain_hours[:3])
-        lines.append(f"Увага: очікується дощ о {hours_str} 🌧️")
-
-    # --- Опис хвиль ---
-    if waves:
-        if "слабкі" in waves or "спокійн" in waves:
-            lines.append(f"Хвилі слабкі ({waves}) — ідеально для купання.")
-        elif "помірні" in waves:
-            lines.append(f"Хвилі помірні ({waves}) — обережно з малими дітьми.")
-        elif "сильні" in waves or "високі" in waves:
-            lines.append(f"Хвилі сильні ({waves}) — краще не заходити глибоко.")
-        else:
-            lines.append(f"Хвилі: {waves}.")
+        parts.append(f"очікується дощ о {', '.join(rain_hours[:2])} 🌧️")
 
     # --- Зміни протягом доби ---
     if hourly:
@@ -247,35 +244,25 @@ def generate_commentary(d):
         min_temp_h = min((h.get("temp", 100) for h in hourly), default=temp)
         max_wind_h = max((h.get("wind", 0) for h in hourly), default=wind)
         max_uv_h = max((h.get("uv", 0) for h in hourly), default=uv or 0)
+        max_wave_h = max((w.get("height", 0) for w in wave_hourly if w.get("height") is not None), default=0)
 
         changes = []
-
         if max_temp_h > temp + 2:
-            changes.append(f" температура підніметься до {max_temp_h}°C")
+            changes.append(f"потепліє до {max_temp_h}°C")
         elif min_temp_h < temp - 3:
-            changes.append(f" температура опуститься до {min_temp_h}°C")
-
+            changes.append(f"похолодніє до {min_temp_h}°C")
         if max_wind_h > wind + 15:
-            changes.append(f" вітер посилиться до {max_wind_h} км/г")
-
+            changes.append(f"вітер посилиться до {max_wind_h} км/г")
         if max_uv_h >= 8:
-            changes.append(f" UV-індекс сягне {max_uv_h}")
+            changes.append(f"UV сягне {max_uv_h}")
+        if max_wave_h > (wave_now or 0) + 0.3:
+            w_desc = wave_description(max_wave_h)
+            changes.append(f"хвилі посиляться до {w_desc} ({max_wave_h} м)")
 
         if changes:
-            lines.append("Зміни:" + ",".join(changes) + ".")
+            parts.append("зміни: " + ", ".join(changes))
 
-    # --- Порада ---
-    safety = beach_safety_score(uv, wind, waves, precip)
-    if safety[0] >= 80:
-        lines.append("Ідеальний день для пляжу — користуйся!")
-    elif safety[0] >= 60:
-        lines.append("Добре для пляжу, але будь уважний.")
-    elif safety[0] >= 40:
-        lines.append("Не найкращий день — обмеж час на сонці.")
-    else:
-        lines.append("Краще не йти на пляж сьогодні.")
-
-    return "\n".join(lines)
+    return ". ".join(parts) + "."
 
 
 # ==================== ОПИС ПОГОДИ НА ДОБУ (GROQ) ====================
@@ -345,40 +332,67 @@ def generate_daily_description(d):
 # ==================== КІНЕЦЬ ====================
 
 
-def get_aemet_waves():
-    if not AEMET_API_KEY:
-        return None
-    url = f"https://opendata.aemet.es/opendata/api/prediccion/especifica/playa/{AEMET_PLAYA_ID}/?api_key={AEMET_API_KEY}"
+def get_marine_data():
     try:
-        r = requests.get(url, headers={"cache-control": "no-cache"}, timeout=10)
-        if r.status_code != 200:
-            return None
-        d = r.json()
-        if d.get("estado") != 200:
-            return None
-        data_url = d.get("datos")
-        if not data_url:
-            return None
-        r2 = requests.get(data_url, headers={"cache-control": "no-cache"}, timeout=10)
-        if r2.status_code != 200:
-            return None
-        data = r2.json()
-        today = datetime.date.today().strftime("%Y%m%d")
-        for item in data:
-            for dia in item.get("prediccion", {}).get("dia", []):
-                if str(dia.get("fecha")) == today:
-                    oleaje = dia.get("oleaje", {}).get("descripcion1", "")
-                    if oleaje == "débil":
-                        return "слабкі 🌊"
-                    elif oleaje == "moderado":
-                        return "помірні 🌊🌊"
-                    elif oleaje == "fuerte":
-                        return "сильні 🌊🌊🌊"
-                    elif oleaje:
-                        return oleaje
+        r = requests.get(MARINE_URL, timeout=15)
+        r.raise_for_status()
+        j = r.json()
+        hourly = j.get("hourly", {})
+        times = hourly.get("time", [])
+        heights = hourly.get("wave_height", [])
+        periods = hourly.get("wave_period", [])
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+        target_time = now.strftime("%Y-%m-%dT%H:00")
+
+        # Поточна висота хвилі
+        wave_now = None
+        period_now = None
+        for i, t in enumerate(times):
+            if t == target_time:
+                if i < len(heights) and heights[i] is not None:
+                    wave_now = heights[i]
+                if i < len(periods) and periods[i] is not None:
+                    period_now = periods[i]
+                break
+
+        # Погодинні хвилі (24 години)
+        start_index = None
+        for i, t in enumerate(times):
+            if t >= target_time:
+                start_index = i
+                break
+        if start_index is None:
+            start_index = 0
+
+        wave_hourly = []
+        for i in range(start_index, min(start_index + 24, len(times))):
+            h = int(times[i].split("T")[1].split(":")[0])
+            wh = heights[i] if i < len(heights) and heights[i] is not None else None
+            wp = periods[i] if i < len(periods) and periods[i] is not None else None
+            wave_hourly.append({"hour": h, "height": wh, "period": wp})
+
+        return {
+            "wave_now": wave_now,
+            "period_now": period_now,
+            "wave_hourly": wave_hourly
+        }
+    except Exception as e:
+        print(f"Marine API error: {e}")
         return None
-    except:
+
+
+def wave_description(height):
+    if height is None:
         return None
+    if height < 0.5:
+        return "слабкі"
+    elif height < 1.0:
+        return "помірні"
+    elif height < 2.0:
+        return "сильні"
+    else:
+        return "дуже сильні"
 
 
 def get_all_data():
@@ -533,7 +547,7 @@ def get_all_data():
                     "sunset": sunset_str
                 })
 
-            waves = get_aemet_waves()
+            waves = get_marine_data()
 
             return {
                 "current": {
@@ -546,7 +560,9 @@ def get_all_data():
                 "water_temp": rnd(water_now),
                 "uv_now": rnd(uv_now),
                 "precip_now": precip_now,
-                "waves": waves,
+                "wave_now": waves["wave_now"] if waves else None,
+                "wave_period": waves["period_now"] if waves else None,
+                "wave_hourly": waves["wave_hourly"] if waves else [],
                 "hourly": hourly_list,
                 "daily": daily_list,
                 "time_of_day": time_of_day
@@ -576,8 +592,8 @@ def uv_label(val):
 def build_message(d):
     c = d["current"]
     tod = d["time_of_day"]
-    wave_val = d.get("waves")
-    water_val = d.get("water_temp")
+    wave_now = d.get("wave_now")
+    wave_hourly = d.get("wave_hourly", [])
     uv_val = d.get("uv_now")
     precip_val = d.get("precip_now")
     hourly = d.get("hourly", [])
@@ -591,8 +607,8 @@ def build_message(d):
     msg += f"🌡 Температура: {c['temp']}°C (відчувається як {c.get('apparent', c['temp'])}°C)\n"
     msg += f"☁️ Небо: {WEATHER_CODES.get(c['code'], 'невідомо').split(' ')[0]}\n"
     msg += f"💨 Вітер: {c['wind']} км/г {c['wind_dir']}\n"
-    if wave_val:
-        msg += f"🌊 Хвилі: {wave_val}\n"
+    if wave_now is not None:
+        msg += f"🌊 Хвилі: {wave_now} м\n"
     if uv_val is not None:
         msg += f"☀️ UV-індекс: {uv_label(uv_val)}\n"
     if precip_val is not None:
@@ -600,8 +616,9 @@ def build_message(d):
         msg += f"🌧 Опади: {precip_val}% ({rain_status})\n"
 
     # === РЕЙТИНГ БЕЗПЕКИ ===
+    wave_desc = wave_description(wave_now)
     safety_score, safety_emoji, safety_label, _ = beach_safety_score(
-        uv_val, c['wind'], wave_val, precip_val
+        uv_val, c['wind'], wave_desc, precip_val
     )
     msg += f"🟢 Рейтинг пляжу: {safety_score}/100 ({safety_label})\n\n"
 
@@ -612,13 +629,21 @@ def build_message(d):
     # === ПОГОДИННИЙ ПРОГНОЗ ===
     msg += "📋 Погодинний прогноз:\n"
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+
+    # З'єднуємо погодинні дані з хвилями
+    wave_by_hour = {w["hour"]: w for w in wave_hourly}
+
     for h in hourly:
         hc = WEATHER_CODES_SHORT.get(h["code"], "?")
         precip_h = h.get("precip_prob")
         if precip_h is not None and precip_h > 0:
             hc = "🌧" if precip_h < 70 else "⛈"
         wind_str = f"{h.get('wind', 0):>2}" if h.get('wind') is not None else " ?"
-        msg += f"{h['hour']:02d}:00 │ {h['temp']}° {hc} │ 💨{wind_str} │ UV {h.get('uv', '?')}\n"
+
+        wh = wave_by_hour.get(h["hour"], {}).get("height")
+        wave_str = f"🌊{wh:.1f}" if wh is not None else "🌊 —"
+
+        msg += f"{h['hour']:02d}:00 │ {h['temp']}° {hc} │ 💨{wind_str} │ {wave_str} │ UV {h.get('uv', '?')}\n"
 
     # === 7-ДЕННИЙ ПРОГНОЗ ===
     msg += "\n📅 Прогноз на тиждень:\n"
