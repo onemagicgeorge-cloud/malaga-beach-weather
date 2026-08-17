@@ -597,7 +597,7 @@ def build_message(d):
 
     # === AI-КОМЕНТАР ===
     commentary = generate_commentary(d)
-    msg += f"\n💬 Що я думаю про погоду:\n"
+    msg += f"\n💬 Коротко про погоду:\n"
     msg += f"{commentary}\n"
 
     # === ОПИС ПОГОДИ НА ДОБУ (GROQ) ===
