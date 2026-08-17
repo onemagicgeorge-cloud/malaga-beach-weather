@@ -40,6 +40,20 @@ OPEN_METEO_URL = (
     f"&timezone=auto&forecast_days=7"
 )
 
+WEATHER_CODES_SHORT = {
+    0: "☀️", 1: "🌤", 2: "⛅",
+    3: "☁️", 45: "🌫", 48: "🌫",
+    51: "🌦", 53: "🌧", 55: "🌧",
+    56: "🌧", 57: "🌧",
+    61: "🌧", 63: "🌧", 65: "🌧",
+    66: "🌧", 67: "🌧",
+    71: "❄️", 73: "❄️", 75: "❄️",
+    77: "❄️",
+    80: "🌧", 81: "🌧", 82: "🌧",
+    85: "❄️", 86: "❄️",
+    95: "⛈", 96: "⛈", 99: "⛈"
+}
+
 WEATHER_CODES = {
     0: "Ясно ☀️", 1: "Малохмарно 🌤", 2: "Хмарно ⛅",
     3: "Похмуро ☁️", 45: "Туман 🌫", 48: "Паморозь 🌫",
@@ -203,8 +217,18 @@ def generate_commentary(d):
 
     # --- Коротко про зараз ---
     sky_desc = WEATHER_CODES.get(code, "невідомо").split(" ")[0]
-    wind_level = wind_speed_level(wind)[1]
-    lines.append(f"Зараз у Малагі {sky_desc}, {temp}°C, вітер {wind} км/г ({wind_level}).")
+    lines.append(f"Зараз {sky_desc.lower()}, {temp}°C, вітер {wind} км/г.")
+
+    # --- Авто-попередження про дощ ---
+    rain_hours = []
+    for h in hourly[:12]:
+        pp = h.get("precip_prob")
+        if pp is not None and pp > 20:
+            rain_hours.append(f"{h['hour']:02d}:00 ({pp}%)")
+
+    if rain_hours:
+        hours_str = ", ".join(rain_hours[:3])
+        lines.append(f"Увага: очікується дощ о {hours_str} 🌧️")
 
     # --- Зміни протягом доби ---
     if hourly:
@@ -216,38 +240,27 @@ def generate_commentary(d):
         changes = []
 
         if max_temp_h > temp + 2:
-            changes.append(f"температура підніметься до {max_temp_h}°C")
+            changes.append(f" температура підніметься до {max_temp_h}°C")
         elif min_temp_h < temp - 3:
-            changes.append(f"температура опуститься до {min_temp_h}°C")
+            changes.append(f" температура опуститься до {min_temp_h}°C")
 
         if max_wind_h > wind + 15:
-            changes.append(f"вітер посилиться до {max_wind_h} км/г")
-        elif max_wind_h < wind - 5 and wind > 10:
-            changes.append("вітер стихне")
+            changes.append(f" вітер посилиться до {max_wind_h} км/г")
 
         if max_uv_h >= 8:
-            changes.append(f"UV-індекс сягне {max_uv_h} (дуже високий)")
-        elif max_uv_h >= 6 and (uv or 0) < 6:
-            changes.append(f"UV-індекс зросте до {max_uv_h}")
-
-        if precip is not None and precip >= 50:
-            changes.append("ймовірність дощу")
-        elif any(h.get("precip_prob", 0) and h.get("precip_prob", 0) >= 50 for h in hourly[:6]):
-            changes.append("ближче до ночі можливий дощ")
+            changes.append(f" UV-індекс сягне {max_uv_h}")
 
         if changes:
-            lines.append("Зміни: " + ", ".join(changes) + ".")
-        else:
-            lines.append("Суттєвих змін протягом доби не очікується.")
+            lines.append("Зміни:" + ",".join(changes) + ".")
 
     # --- Порада ---
     safety = beach_safety_score(uv, wind, waves, precip)
     if safety[0] >= 80:
         lines.append("Ідеальний день для пляжу — користуйся!")
     elif safety[0] >= 60:
-        lines.append("Добре для пляжу, але будь уважний до змін.")
+        lines.append("Добре для пляжу, але будь уважний.")
     elif safety[0] >= 40:
-        lines.append("Не найкращий день — краще обмежити час на сонці.")
+        lines.append("Не найкращий день — обмеж час на сонці.")
     else:
         lines.append("Краще не йти на пляж сьогодні.")
 
@@ -551,87 +564,60 @@ def uv_label(val):
 
 def build_message(d):
     c = d["current"]
-    cd = WEATHER_CODES.get(c["code"], f"Код {c['code']}")
     tod = d["time_of_day"]
     wave_val = d.get("waves")
     water_val = d.get("water_temp")
     uv_val = d.get("uv_now")
     precip_val = d.get("precip_now")
+    hourly = d.get("hourly", [])
 
     # === ЗАГОЛОВОК ===
-    if tod == "morning":
-        msg = f"🌅 {BEACH_NAME} — доброго ранку!\n"
-    elif tod == "midday":
-        msg = f"☀️ {BEACH_NAME} — день!\n"
-    else:
-        msg = f"🌙 {BEACH_NAME} — добрий вечір!\n"
-
     date_str = spain_now.strftime("%d.%m.%Y")
-    msg += f"📅 {date_str}\n"
+    msg = f"🌊 {BEACH_NAME} — {date_str}\n\n"
 
     # === ПОГОДА ЗАРАЗ ===
-    msg += f"\n🔵 Погода зараз:\n"
+    msg += "🔵 Погода зараз:\n"
     msg += f"🌡 Температура: {c['temp']}°C (відчувається як {c.get('apparent', c['temp'])}°C)\n"
-    msg += f"💨 Вітер: {c['wind']} км/г {c['wind_dir']} ({wind_speed_level(c['wind'])[1]})\n"
-    msg += f"🌤 Небо: {cd}\n"
-    if water_val is not None:
-        msg += f"🌊 Температура води: {water_val}°C\n"
-    if uv_val is not None:
-        msg += f"☀️ UV зараз: {uv_label(uv_val)}\n"
+    msg += f"☁️ Небо: {WEATHER_CODES.get(c['code'], 'невідомо').split(' ')[0]}\n"
+    msg += f"💨 Вітер: {c['wind']} км/г {c['wind_dir']}\n"
     if wave_val:
-        msg += f"🌊 Хвилі сьогодні: {wave_val}\n"
+        msg += f"🌊 Хвилі: {wave_val}\n"
+    if uv_val is not None:
+        msg += f"☀️ UV-індекс: {uv_label(uv_val)}\n"
     if precip_val is not None:
-        msg += f"🌧 Ймовірність дощу: {precip_val}%\n"
+        rain_status = "без опадів" if precip_val < 20 else "можливий дощ" if precip_val < 50 else "ймовірний дощ"
+        msg += f"🌧 Опади: {precip_val}% ({rain_status})\n"
 
     # === РЕЙТИНГ БЕЗПЕКИ ===
     safety_score, safety_emoji, safety_label, _ = beach_safety_score(
         uv_val, c['wind'], wave_val, precip_val
     )
-    msg += f"\n{safety_emoji} Рейтинг безпеки: {safety_score}/100 — {safety_label}\n"
+    msg += f"🟢 Рейтинг пляжу: {safety_score}/100 ({safety_label})\n\n"
 
-    # === ПОПЕРЕДЖЕННЯ ===
-    alert_list = []
-    alerts(uv_val, c['wind'], wave_val, precip_val, c['code'], alert_list)
-    if alert_list:
-        msg += "\n" + "\n".join(alert_list) + "\n"
-
-    # === AI-КОМЕНТАР ===
+    # === КОРОТКО ПРО ПОГОДУ ===
     commentary = generate_commentary(d)
-    msg += f"\n💬 Коротко про погоду:\n"
-    msg += f"{commentary}\n"
+    msg += f"💡 Коротко про погоду:\n{commentary}\n\n"
 
-    # === ОПИС ПОГОДИ НА ДОБУ (GROQ) ===
-    daily_desc = generate_daily_description(d)
-    if daily_desc:
-        msg += f"\n🌤 Прогноз на добу:\n"
-        msg += f"{daily_desc}\n"
-
-    # === ПОГОДИННИЙ ПРОГНОЗ (24 години) ===
-    msg += "\n📋 Погодинний прогноз (24 години):\n"
+    # === ПОГОДИННИЙ ПРОГНОЗ ===
+    msg += "📋 Погодинний прогноз:\n"
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    for h in d["hourly"]:
-        hc = WEATHER_CODES.get(h["code"], "?")
-        msg += (
-            f"  {h['hour']:02d}:00 │ {h['temp']}°C │ {hc}\n"
-            f"           │ 💨 {h.get('wind','?')} {h.get('wind_dir','')} │ ☀️ UV {h.get('uv','?')}\n"
-        )
+    for h in hourly:
+        hc = WEATHER_CODES_SHORT.get(h["code"], "?")
+        precip_h = h.get("precip_prob")
+        if precip_h is not None and precip_h > 0:
+            hc = "🌧" if precip_h < 70 else "⛈"
+        wind_str = f"{h.get('wind', 0):>2}" if h.get('wind') is not None else " ?"
+        msg += f"{h['hour']:02d}:00 │ {h['temp']}° {hc} │ 💨{wind_str} │ UV {h.get('uv', '?')}\n"
 
     # === 7-ДЕННИЙ ПРОГНОЗ ===
     msg += "\n📅 Прогноз на тиждень:\n"
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     for day in d["daily"]:
-        dc = WEATHER_CODES.get(day["code"], "?")
-        uv_str = f"☀️UV:{day['uv_max']}" if day['uv_max'] is not None else ""
-        rain_str = f"💧{day['precip_max']}%" if day.get('precip_max') is not None else ""
-        wind_str = f"💨{day['wind_max']}" if day.get('wind_max') is not None else ""
-        sun_str = ""
-        if day.get('sunrise') and day.get('sunset'):
-            sun_str = f"🌅{day['sunrise']} 🌇{day['sunset']}"
-
-        msg += (
-            f"  {day['day']} {day['date']} │ {day['min']}°/{day['max']}° │ {dc}\n"
-            f"           │ {uv_str} {rain_str} {wind_str} {sun_str}\n"
-        )
+        dc = WEATHER_CODES_SHORT.get(day["code"], "?")
+        date_parts = day["date"].split("-")
+        short_date = f"{date_parts[2]}.{date_parts[1]}"
+        wind_str = f"{day['wind_max']:>2}" if day.get('wind_max') is not None else " ?"
+        msg += f"{day['day']} {short_date} │ {day['min']}°/{day['max']}° │ {dc} │ 💨{wind_str} │ UV {day.get('uv_max', '?')}\n"
 
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     msg += "🤖 @malaga_beach_weather"
