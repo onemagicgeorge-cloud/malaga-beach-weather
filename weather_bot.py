@@ -9,9 +9,9 @@ import math
 import json
 
 # ==================== НАЛАШТУВАННЯ ====================
-LATITUDE = 36.7200
-LONGITUDE = -4.4100
-BEACH_NAME = "Playa de la Malagueta"
+LATITUDE = 36.6630
+LONGITUDE = -4.4571
+BEACH_NAME = "Playa de Guadalmar"
 AEMET_PLAYA_ID = "2906707"
 # =====================================================
 
@@ -661,11 +661,9 @@ def build_message(d):
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     for day in d["daily"]:
         dc = WEATHER_CODES_SHORT.get(day["code"], "?")
-        date_parts = day["date"].split("-")
-        short_date = f"{date_parts[2]}.{date_parts[1]}"
         wind_str = f"{day['wind_max']:>2}" if day.get('wind_max') is not None else " ?"
         water_str = f"💧{day['water_temp']}°" if day.get('water_temp') is not None else ""
-        msg += f"{day['day']} {short_date} │ {day['min']}°/{day['max']}° │ {dc} │ 💨{wind_str} │ UV {day.get('uv_max', '?')} {water_str}\n"
+        msg += f"{day['day']} │ {day['min']}°/{day['max']}° │ {dc} │ 💨{wind_str} │ UV {day.get('uv_max', '?')} {water_str}\n"
 
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     msg += "🤖 @malaga_beach_weather"
