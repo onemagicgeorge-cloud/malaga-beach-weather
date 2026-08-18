@@ -534,6 +534,13 @@ def get_all_data():
                     except:
                         pass
 
+                # Температура води за день (середня з погодинних)
+                day_water_temps = []
+                for j, t in enumerate(times):
+                    if t.startswith(date) and j < len(sea_temps) and sea_temps[j] is not None:
+                        day_water_temps.append(sea_temps[j])
+                water_avg = round(sum(day_water_temps) / len(day_water_temps)) if day_water_temps else None
+
                 daily_list.append({
                     "date": date,
                     "day": dow,
@@ -544,7 +551,8 @@ def get_all_data():
                     "precip_max": daily_precip_max[i] if i < len(daily_precip_max) and daily_precip_max[i] is not None else None,
                     "wind_max": rnd(daily_wind_max[i]) if i < len(daily_wind_max) else None,
                     "sunrise": sunrise_str,
-                    "sunset": sunset_str
+                    "sunset": sunset_str,
+                    "water_temp": water_avg
                 })
 
             waves = get_marine_data()
@@ -596,6 +604,7 @@ def build_message(d):
     wave_hourly = d.get("wave_hourly", [])
     uv_val = d.get("uv_now")
     precip_val = d.get("precip_now")
+    water_val = d.get("water_temp")
     hourly = d.get("hourly", [])
 
     # === ЗАГОЛОВОК ===
@@ -609,6 +618,8 @@ def build_message(d):
     msg += f"💨 Вітер: {c['wind']} км/г {c['wind_dir']}\n"
     if wave_now is not None:
         msg += f"🌊 Хвилі: {wave_now} м\n"
+    if water_val is not None:
+        msg += f"💧 Вода: {water_val}°C\n"
     if uv_val is not None:
         msg += f"☀️ UV-індекс: {uv_label(uv_val)}\n"
     if precip_val is not None:
@@ -653,7 +664,8 @@ def build_message(d):
         date_parts = day["date"].split("-")
         short_date = f"{date_parts[2]}.{date_parts[1]}"
         wind_str = f"{day['wind_max']:>2}" if day.get('wind_max') is not None else " ?"
-        msg += f"{day['day']} {short_date} │ {day['min']}°/{day['max']}° │ {dc} │ 💨{wind_str} │ UV {day.get('uv_max', '?')}\n"
+        water_str = f"💧{day['water_temp']}°" if day.get('water_temp') is not None else ""
+        msg += f"{day['day']} {short_date} │ {day['min']}°/{day['max']}° │ {dc} │ 💨{wind_str} │ UV {day.get('uv_max', '?')} {water_str}\n"
 
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     msg += "🤖 @malaga_beach_weather"
