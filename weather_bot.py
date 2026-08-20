@@ -208,96 +208,33 @@ def alerts(uv, wind_speed, waves_desc, precip_prob, weather_code, alerts_list):
 
 
 def generate_commentary(d):
+    if not GROQ_API_KEY:
+        return _fallback_commentary(d)
+
     c = d["current"]
-    temp = c.get("temp", 20)
-    uv = d.get("uv_now", 0)
-    wind = c.get("wind", 0)
-    wave_now = d.get("wave_now")
-    precip = d.get("precip_now", 0)
-    code = c.get("code", 0)
     hourly = d.get("hourly", [])
+    wave_now = d.get("wave_now")
     wave_hourly = d.get("wave_hourly", [])
 
-    parts = []
+    max_temp_h = max((h.get("temp", 0) for h in hourly), default=c.get("temp", 20))
+    max_uv_h = max((h.get("uv", 0) for h in hourly), default=d.get("uv_now", 0) or 0)
+    max_wind_h = max((h.get("wind", 0) for h in hourly), default=c.get("wind", 0))
+    max_wave_h = max((w.get("height", 0) for w in wave_hourly if w.get("height") is not None), default=wave_now or 0)
 
-    # --- Зараз ---
-    sky_desc = WEATHER_CODES.get(code, "невідомо").split(" ")[0]
-    parts.append(f"Зараз {sky_desc.lower()}, {temp}°C, вітер {wind} км/г")
-
-    # --- Хвилі зараз ---
-    if wave_now is not None:
-        w_desc = wave_description(wave_now)
-        parts.append(f"хвилі {w_desc} ({wave_now} м)")
-
-    # --- Дощ ---
     rain_hours = []
     for h in hourly[:12]:
         pp = h.get("precip_prob")
         if pp is not None and pp > 20:
             rain_hours.append(f"{h['hour']:02d}:00")
-    if rain_hours:
-        parts.append(f"очікується дощ о {', '.join(rain_hours[:2])} 🌧️")
 
-    # --- Зміни протягом доби ---
-    if hourly:
-        max_temp_h = max((h.get("temp", 0) for h in hourly), default=temp)
-        min_temp_h = min((h.get("temp", 100) for h in hourly), default=temp)
-        max_wind_h = max((h.get("wind", 0) for h in hourly), default=wind)
-        max_uv_h = max((h.get("uv", 0) for h in hourly), default=uv or 0)
-        max_wave_h = max((w.get("height", 0) for w in wave_hourly if w.get("height") is not None), default=0)
-
-        changes = []
-        if max_temp_h > temp + 2:
-            changes.append(f"потепліє до {max_temp_h}°C")
-        elif min_temp_h < temp - 3:
-            changes.append(f"похолодніє до {min_temp_h}°C")
-        if max_wind_h > wind + 15:
-            changes.append(f"вітер посилиться до {max_wind_h} км/г")
-        if max_uv_h >= 8:
-            changes.append(f"UV сягне {max_uv_h}")
-        if max_wave_h > (wave_now or 0) + 0.3:
-            w_desc = wave_description(max_wave_h)
-            changes.append(f"хвилі посиляться до {w_desc} ({max_wave_h} м)")
-
-        if changes:
-            parts.append("зміни: " + ", ".join(changes))
-
-    return ". ".join(parts) + "."
-
-
-# ==================== ОПИС ПОГОДИ НА ДОБУ (GROQ) ====================
-
-def generate_daily_description(d):
-    if not GROQ_API_KEY:
-        return None
-
-    c = d["current"]
-    hourly = d.get("hourly", [])
-
-    current_summary = (
-        f"Поточна погода: температура {c['temp']}°C (відчувається як {c.get('apparent', c['temp'])}°C), "
-        f"вітер {c['wind']} км/г {c['wind_dir']}, небо: {WEATHER_CODES.get(c['code'], 'невідомо')}, "
-        f"вода: {d.get('water_temp', '?')}°C, UV: {d.get('uv_now', '?')}, "
-        f"хвилі: {d.get('waves', 'невідомо')}, ймовірність дощу: {d.get('precip_now', '?')}%"
+    prompt = (
+        f"Одне речення українською (18-22 слова) про погоду на пляжі в Малазі. "
+        f"Акценти: вода, хвилі, UV, зміни дня. Живою мовою. "
+        f"Дані: зараз {c['temp']}°C, {WEATHER_CODES.get(c['code'], '').split(' ')[0]}, "
+        f"вітер {c['wind']}км/г, вода {d.get('water_temp', '?')}°C, "
+        f"хвилі {wave_now or '?'}м, макс {max_temp_h}°C, UV {max_uv_h}, вітер {max_wind_h}км/г"
+        + (f", дощ {', '.join(rain_hours[:2])}" if rain_hours else "")
     )
-
-    hourly_summary = "Погодинний прогноз:\n"
-    for h in hourly[:12]:
-        hc = WEATHER_CODES.get(h.get("code"), "?")
-        hourly_summary += (
-            f"  {h['hour']:02d}:00 - {h['temp']}°C, {hc}, "
-            f"вітер {h.get('wind', '?')} км/г, "
-            f"UV: {h.get('uv', '?')}\n"
-        )
-
-    prompt = f"""Ти — бот пляжного погоди в Малазі, Іспанія. Пиши українською мовою.
-Напиши короткий (3-5 речень) опис погоди на наступні 12 годин на пляжі Playa de la Malagueta.
-Будь креативним, дотепним, але корисним. Порадь, чи варто йти на пляж.
-Не використовуй емодзі. Пиши як розмовна людина.
-
-{current_summary}
-
-{hourly_summary}"""
 
     try:
         headers = {
@@ -306,27 +243,43 @@ def generate_daily_description(d):
         }
         payload = {
             "model": "openai/gpt-oss-20b",
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.7,
-            "max_tokens": 500
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.5,
+            "max_tokens": 1024
         }
         r = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=30
+            headers=headers, json=payload, timeout=15
         )
         if r.status_code == 200:
-            data = r.json()
-            return data["choices"][0]["message"]["content"].strip()
-        else:
-            print(f"GROQ API error {r.status_code}: {r.text[:200]}")
-            return None
+            result = r.json()["choices"][0]["message"]["content"].strip()
+            if result:
+                return result
     except Exception as e:
-        print(f"GROQ error: {e}")
-        return None
+        print(f"GROQ commentary error: {e}")
+
+    return _fallback_commentary(d)
+
+
+def _fallback_commentary(d):
+    c = d["current"]
+    temp = c.get("temp", 20)
+    wind = c.get("wind", 0)
+    wave_now = d.get("wave_now")
+    code = c.get("code", 0)
+    hourly = d.get("hourly", [])
+    wave_hourly = d.get("wave_hourly", [])
+
+    sky_desc = WEATHER_CODES.get(code, "невідомо").split(" ")[0]
+    max_temp_h = max((h.get("temp", 0) for h in hourly), default=temp)
+    wave_desc = wave_description(wave_now) if wave_now else "невідомо"
+
+    parts = [f"Зараз {sky_desc.lower()}, {temp}°C, вітер {wind} км/г"]
+    if wave_now is not None:
+        parts.append(f"хвилі {wave_desc} ({wave_now} м)")
+    if max_temp_h > temp + 2:
+        parts.append(f"потепліє до {max_temp_h}°C")
+    return ". ".join(parts) + "."
 
 
 # ==================== КІНЕЦЬ ====================
