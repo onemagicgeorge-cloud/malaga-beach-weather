@@ -34,7 +34,7 @@ else:
 OPEN_METEO_URL = (
     f"https://api.open-meteo.com/v1/forecast?"
     f"latitude={LATITUDE}&longitude={LONGITUDE}"
-    f"&current_weather=true"
+    f"&current=temperature_2m,apparent_temperature,weathercode,wind_speed_10m,wind_direction_10m,relative_humidity_2m"
     f"&hourly=temperature_2m,apparent_temperature,weathercode,wind_speed_10m,wind_direction_10m,precipitation_probability,uv_index,sea_surface_temperature"
     f"&daily=temperature_2m_max,temperature_2m_min,weathercode,uv_index_max,sunrise,sunset,precipitation_probability_max,wind_speed_10m_max"
     f"&timezone=auto&forecast_days=7"
@@ -355,9 +355,11 @@ def get_all_data():
             r.raise_for_status()
             j = r.json()
 
-            cur = j["current_weather"]
+            cur = j["current"]
             hourly = j.get("hourly", {})
             daily = j.get("daily", {})
+
+            humidity_now = cur.get("relative_humidity_2m")
 
             now = datetime.datetime.now(datetime.timezone.utc)
             today_str = now.strftime("%Y-%m-%d")
@@ -399,18 +401,6 @@ def get_all_data():
                         uv_now = uvs[i]
                         break
 
-            # Поточний apparent temperature
-            apparent_now = None
-            for i, t in enumerate(times):
-                if t == target_time and i < len(apparent) and apparent[i] is not None:
-                    apparent_now = apparent[i]
-                    break
-            if apparent_now is None and apparent:
-                for i, t in enumerate(times):
-                    if t.startswith(today_str) and i < len(apparent) and apparent[i] is not None:
-                        apparent_now = apparent[i]
-                        break
-
             # Поточний precip probability
             precip_now = None
             for i, t in enumerate(times):
@@ -422,13 +412,6 @@ def get_all_data():
                     if t.startswith(today_str) and i < len(precip_probs) and precip_probs[i] is not None:
                         precip_now = precip_probs[i]
                         break
-
-            # Поточний вітер (напрямок)
-            wind_dir_now = None
-            for i, t in enumerate(times):
-                if t == target_time and i < len(wind_dirs) and wind_dirs[i] is not None:
-                    wind_dir_now = wind_dirs[i]
-                    break
 
             # 24-годинний прогноз
             start_index = None
@@ -512,11 +495,12 @@ def get_all_data():
 
             return {
                 "current": {
-                    "temp": rnd(cur["temperature"]),
-                    "apparent": rnd(apparent_now),
-                    "wind": rnd(cur["windspeed"]),
-                    "wind_dir": wind_direction(wind_dir_now),
-                    "code": cur["weathercode"]
+                    "temp": rnd(cur["temperature_2m"]),
+                    "apparent": rnd(cur.get("apparent_temperature")),
+                    "wind": rnd(cur["wind_speed_10m"]),
+                    "wind_dir": wind_direction(cur.get("wind_direction_10m")),
+                    "code": cur["weathercode"],
+                    "humidity": rnd(humidity_now)
                 },
                 "water_temp": rnd(water_now),
                 "uv_now": rnd(uv_now),
@@ -569,6 +553,8 @@ def build_message(d):
     msg += f"🌡 Температура: {c['temp']}°C (відчувається як {c.get('apparent', c['temp'])}°C)\n"
     msg += f"☁️ Небо: {WEATHER_CODES.get(c['code'], 'невідомо').split(' ')[0]}\n"
     msg += f"💨 Вітер: {c['wind']} км/г {c['wind_dir']}\n"
+    if c.get('humidity') is not None:
+        msg += f"💧 Вологість: {c['humidity']}%\n"
     if wave_now is not None:
         msg += f"🌊 Хвилі: {wave_now} м\n"
     if water_val is not None:
