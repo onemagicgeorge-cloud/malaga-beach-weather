@@ -39,6 +39,7 @@ LAST_UPDATE_HOURS_BEFORE = 1
 
 TELEGRAM_TOKEN = os.environ.get("BOT_TOKEN", "")
 CHANNEL_ID = os.environ.get("SUNSET_CHANNEL_ID", "-1004312201455")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 MADRID_TZ = zoneinfo.ZoneInfo("Europe/Madrid")
@@ -303,24 +304,53 @@ def tier_label(idx):
     return "⚪"
 
 
-# ==================== GROQ КОМЕНТАР ====================
+# ==================== AI КОМЕНТАР (Gemini + Groq fallback) ====================
 
-def groq_sunset_comment(f: dict) -> str:
-    """Одне просте речення про умови під час заходу (необов'язково)."""
-    if not GROQ_API_KEY:
-        return ""
-    prompt = (
+def _comment_prompt(f: dict) -> str:
+    """Спільний промпт для обох провайдерів."""
+    return (
         "Ти — порадник фотографу заходу сонця в Малазі (Іспанія). "
-        "Напиши ОДНЕ просте речення (до 25 слів), яке підсумовує, чого "
-        "очікувати ввечері і чи варто йти фотографувати. Врахуй фактично: "
-        f"загальна хмарність {round(f['cloud_total'])}%), "
-        f"серед./вис. хмарність {round(f['screen_avg'])}%, "
-        f"низька хмарність на горизонті {round(f['cloud_low'])}%, "
-        f"видимість {round(f['visibility_km'])} км, "
-        f"ймовірність дощу {f['rain_prob']}%, "
-        f"шанс на красивий захід {f['index']}/100. "
+        "Напиши ОДНЕ живе, змістовне речення (до 30 слів), яке підсумовує, "
+        "чого очікувати ввечері і чи варто йти фотографувати. "
+        "Врахуй фактично: "
+        f"загальна хмарність {round(f['cloud_total'] or 0)}%, "
+        f"серед./вис. хмарність {round(f['screen_avg'] or 0)}%, "
+        f"низька хмарність на горизонті {round(f['cloud_low'] or 0)}%, "
+        f"видимість {round(f['visibility_km'] or 0)} км, "
+        f"ймовірність дощу {f['rain_prob'] or 0}%, "
+        f"шанс на красивий захід {f['index']}%. "
         "Мова — українська, без канцеляриту."
     )
+
+
+def _gemini_comment(prompt: str) -> str:
+    """Google Gemini 2.5-flash (free tier). Повертає порожній рядок на помилці."""
+    if not GEMINI_API_KEY:
+        return ""
+    try:
+        r = requests.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            "gemini-2.5-flash:generateContent"
+            f"?key={GEMINI_API_KEY}",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0.7, "maxOutputTokens": 4096, "stopSequences": ["\n"]},
+            },
+            timeout=25,
+        )
+        r.raise_for_status()
+        parts = r.json()["candidates"][0]["content"]["parts"]
+        return parts[0]["text"].strip()
+    except Exception as e:
+        print(f"Gemini error: {e}")
+        return ""
+
+
+def _groq_comment(prompt: str) -> str:
+    """Groq як запасний варіант, якщо Gemini недоступний."""
+    if not GROQ_API_KEY:
+        return ""
     try:
         r = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
@@ -339,8 +369,18 @@ def groq_sunset_comment(f: dict) -> str:
         r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        print(f"GROQ error: {e}")
+        print(f"Groq error: {e}")
         return ""
+
+
+def ai_sunset_comment(f: dict) -> str:
+    """Спершу пробує Gemini, при збої/порожньому результаті — Groq."""
+    prompt = _comment_prompt(f)
+    text = _gemini_comment(prompt)
+    if text:
+        return text
+    print("Gemini повернув порожнє — пробуємо Groq (fallback).")
+    return _groq_comment(prompt)
 
 
 # ==================== ОСНОВНА ЛОГІКА ====================
@@ -510,7 +550,7 @@ def golden_hour_block(f: dict) -> str:
     if f["pressure"] is not None:
         msg += f"🗜️ Тиск: {round(f['pressure'])} гПа\n"
 
-    comment = groq_sunset_comment(f)
+    comment = ai_sunset_comment(f)
     if comment:
         msg += "\n" + comment + "\n"
 
