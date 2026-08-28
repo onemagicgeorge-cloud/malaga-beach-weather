@@ -608,24 +608,13 @@ def build_message(d):
         msg += f"{h['hour']:02d}:00 │ {h['temp']}° {hc} │ 💨{wind_str} │ {wave_str} │ UV {h.get('uv', '?')}\n"
 
     # === 7-ДЕННИЙ ПРОГНОЗ ===
-    msg += "\n📅 Прогноз на тиждень (від сьогодні):\n"
+    msg += "\n📅 Прогноз на найближчі 7 днів (від сьогодні):\n"
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    today_date = spain_now.strftime("%Y-%m-%d")
-    for idx, day in enumerate(d["daily"]):
+    for day in d["daily"]:
         dc = WEATHER_CODES_SHORT.get(day["code"], "?")
         wind_str = f"{day['wind_max']:>2}" if day.get('wind_max') is not None else " ?"
         water_str = f"💧{day['water_temp']}°" if day.get('water_temp') is not None else ""
-        if idx == 0:
-            label = "Сьогодні"
-        elif idx == 1:
-            label = "Завтра"
-        else:
-            try:
-                dd = datetime.datetime.strptime(day["date"], "%Y-%m-%d")
-                label = f"{day['day']} {dd.day:02d}.{dd.month:02d}"
-            except Exception:
-                label = day["day"]
-        msg += f"{label} │ {day['min']}°/{day['max']}° │ {dc} │ 💨{wind_str} │ UV {day.get('uv_max', '?')} {water_str}\n"
+        msg += f"{day['day']} │ {day['min']}°/{day['max']}° │ {dc} │ 💨{wind_str} │ UV {day.get('uv_max', '?')} {water_str}\n"
 
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     msg += "🤖 @malaga_beach_weather"
