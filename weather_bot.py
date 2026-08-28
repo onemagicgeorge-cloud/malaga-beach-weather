@@ -1,23 +1,19 @@
 import os
 import sys
 import time
-import random
 import requests
 import datetime
 import zoneinfo
 import math
-import json
 
 # ==================== НАЛАШТУВАННЯ ====================
 LATITUDE = 36.6630
 LONGITUDE = -4.4571
 BEACH_NAME = "Playa de Guadalmar"
-AEMET_PLAYA_ID = "2906707"
 # =====================================================
 
 TELEGRAM_TOKEN = os.environ.get("BOT_TOKEN", "")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "")
-AEMET_API_KEY = os.environ.get("AEMET_API_KEY", "").strip()
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 spain_tz = zoneinfo.ZoneInfo("Europe/Madrid")
@@ -99,35 +95,6 @@ def wind_direction(deg):
         if lo <= deg < hi:
             return label
     return "Пн"
-
-
-def wind_speed_level(speed):
-    if speed is None:
-        return 0, ""
-    if speed < 6:
-        return 0, "штиль"
-    elif speed < 20:
-        return 1, "легкий"
-    elif speed < 40:
-        return 2, "помірний"
-    elif speed < 60:
-        return 3, "сильний"
-    else:
-        return 4, "шторм"
-
-
-def heat_index(temp, humidity=None):
-    if temp is None:
-        return None
-    if humidity is None or humidity < 0:
-        humidity = 50
-    if temp < 27:
-        return temp
-    hi = (-8.7847 + 1.6114 * temp + 2.3385 * humidity
-          - 0.1461 * temp * humidity - 0.0068 * temp ** 2
-          - 0.0548 * humidity ** 2 + 0.0012 * temp ** 2 * humidity
-          + 0.0008 * temp * humidity ** 2 - 0.000002 * temp ** 2 * humidity ** 2)
-    return rnd(hi)
 
 
 def beach_safety_score(uv, wind_speed, waves_desc, precip_prob):
@@ -295,7 +262,9 @@ def get_marine_data():
         heights = hourly.get("wave_height", [])
         periods = hourly.get("wave_period", [])
 
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = spain_now
+        # MARINE_URL використовує timezone=auto, а в основній погоді — теж local,
+        # тож шукаємо за місцевим (іспанським) часом, а не за UTC.
         target_time = now.strftime("%Y-%m-%dT%H:00")
 
         # Поточна висота хвилі
