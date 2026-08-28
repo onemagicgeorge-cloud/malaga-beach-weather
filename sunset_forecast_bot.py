@@ -665,7 +665,10 @@ def main():
         print("=== Update sent ===")
 
     write_state(state)
-    print(msg)
+    try:
+        print(msg)
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
