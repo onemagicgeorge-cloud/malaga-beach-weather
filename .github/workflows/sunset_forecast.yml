@@ -2,8 +2,9 @@ name: Sunset Forecast
 
 on:
   schedule:
-    # 13:00 UTC — запас 3–6+ год до заходу сонця цілий рік
-    - cron: '0 13 * * *'
+    # Щогодини з 09:00 до 20:00 UTC. Бот сам вирішує, коли постити:
+    # перевіряє щогодини, а також надсилає оновлення/відміну до самого заходу.
+    - cron: '0 9-20 * * *'
   workflow_dispatch:
 
 jobs:
@@ -11,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.GH_PAT }}
 
       - uses: actions/setup-python@v6
         with:
@@ -24,4 +27,17 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           SUNSET_CHANNEL_ID: ${{ secrets.SUNSET_CHANNEL_ID }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: python sunset_forecast_bot.py
+
+      - name: Push updated state
+        if: always()
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          git config user.name "onemagicgeorge-cloud"
+          git config user.email "onemagicgeorge-cloud@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_PAT}@github.com/onemagicgeorge-cloud/malaga-beach-weather.git"
+          git add .sunset_state.json
+          git commit -m "chore: update sunset state" --allow-empty -q || true
+          git push origin HEAD:main
