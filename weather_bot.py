@@ -10,6 +10,10 @@ import math
 LATITUDE = 36.6630
 LONGITUDE = -4.4571
 BEACH_NAME = "Playa de Guadalmar"
+
+# Координати для температури води (ближче до берега пляжу)
+WATER_LATITUDE = 36.655848
+WATER_LONGITUDE = -4.464546
 # =====================================================
 
 TELEGRAM_TOKEN = os.environ.get("BOT_TOKEN", "")
@@ -41,6 +45,13 @@ MARINE_URL = (
     f"latitude={LATITUDE}&longitude={LONGITUDE}"
     f"&hourly=wave_height,wave_period"
     f"&timezone=auto&forecast_days=2"
+)
+
+WATER_URL = (
+    f"https://api.open-meteo.com/v1/forecast?"
+    f"latitude={WATER_LATITUDE}&longitude={WATER_LONGITUDE}"
+    f"&hourly=sea_surface_temperature"
+    f"&timezone=auto&forecast_days=7"
 )
 
 WEATHER_CODES_SHORT = {
@@ -95,6 +106,23 @@ def wind_direction(deg):
         if lo <= deg < hi:
             return label
     return "Пн"
+
+
+def wind_description(speed):
+    """Людський опис вітру (км/г) — щоб не покладатися на ШІ."""
+    if speed is None:
+        return ""
+    if speed < 5:
+        return "штиль"
+    if speed < 10:
+        return "ледь помітний подих"
+    if speed < 20:
+        return "відчутний вітерець"
+    if speed < 30:
+        return "помітно дме"
+    if speed < 40:
+        return "міцний вітер"
+    return "сильний вітер"
 
 
 def beach_safety_score(uv, wind_speed, waves_desc, precip_prob):
@@ -187,6 +215,7 @@ def generate_commentary(d):
     max_uv_h = max((h.get("uv", 0) for h in hourly), default=d.get("uv_now", 0) or 0)
     max_wind_h = max((h.get("wind", 0) for h in hourly), default=c.get("wind", 0))
     max_wave_h = max((w.get("height", 0) for w in wave_hourly if w.get("height") is not None), default=wave_now or 0)
+    wind_now_desc = wind_description(c.get("wind"))
 
     rain_hours = []
     for h in hourly[:12]:
@@ -197,6 +226,8 @@ def generate_commentary(d):
     prompt = (
         f"Одне речення українською (18-22 слова) про ЩО БУДЕ сьогодні на пляжі в Малазі. "
         f"Не повторюй поточну погоду — лише зміни та очікування. "
+        f"Про вітер говори ТІЛЬКИ людським описом, який я даю, не вигадуй свій: "
+        f"«{wind_now_desc}» ({c.get('wind', '?')} км/г). "
         f"Акценти: коли потепліє/похолодніє, вітер, дощ, хвилі, UV. "
         f"Дані: зараз {c['temp']}°C, вода {d.get('water_temp', '?')}°C, "
         f"хвилі {wave_now or '?'}м, макс {max_temp_h}°C, UV {max_uv_h}, вітер {max_wind_h}км/г"
@@ -324,6 +355,18 @@ def get_all_data():
             r.raise_for_status()
             j = r.json()
 
+            # Окремий запит для температури води (координати біля берега)
+            water_times = []
+            water_sea_temps = []
+            try:
+                wr = requests.get(WATER_URL, timeout=15)
+                wr.raise_for_status()
+                wj = wr.json()
+                water_times = wj.get("hourly", {}).get("time", [])
+                water_sea_temps = wj.get("hourly", {}).get("sea_surface_temperature", [])
+            except Exception as we:
+                print(f"Water API error: {we}")
+
             cur = j["current"]
             hourly = j.get("hourly", {})
             daily = j.get("daily", {})
@@ -345,17 +388,17 @@ def get_all_data():
 
             target_time = spain_now.strftime("%Y-%m-%dT%H:00")
 
-            # Поточна температура води
+            # Поточна температура води (з окремого запиту WATER_URL)
             water_now = None
-            for i, t in enumerate(times):
+            for i, t in enumerate(water_times):
                 if t == target_time:
-                    if i < len(sea_temps) and sea_temps[i] is not None:
-                        water_now = sea_temps[i]
+                    if i < len(water_sea_temps) and water_sea_temps[i] is not None:
+                        water_now = water_sea_temps[i]
                     break
-            if water_now is None and sea_temps:
-                for i, t in enumerate(times):
-                    if t.startswith(today_str) and i < len(sea_temps) and sea_temps[i] is not None:
-                        water_now = sea_temps[i]
+            if water_now is None and water_sea_temps:
+                for i, t in enumerate(water_times):
+                    if t.startswith(today_str) and i < len(water_sea_temps) and water_sea_temps[i] is not None:
+                        water_now = water_sea_temps[i]
                         break
 
             # Поточний UV
@@ -439,11 +482,11 @@ def get_all_data():
                     except:
                         pass
 
-                # Температура води за день (середня з погодинних)
+                # Температура води за день (середня з погодинних, окремий запит)
                 day_water_temps = []
-                for j, t in enumerate(times):
-                    if t.startswith(date) and j < len(sea_temps) and sea_temps[j] is not None:
-                        day_water_temps.append(sea_temps[j])
+                for j, t in enumerate(water_times):
+                    if t.startswith(date) and j < len(water_sea_temps) and water_sea_temps[j] is not None:
+                        day_water_temps.append(water_sea_temps[j])
                 water_avg = round(sum(day_water_temps) / len(day_water_temps)) if day_water_temps else None
 
                 daily_list.append({
@@ -521,7 +564,7 @@ def build_message(d):
     msg += "🔵 Погода зараз:\n"
     msg += f"🌡 Температура: {c['temp']}°C (відчувається як {c.get('apparent', c['temp'])}°C)\n"
     msg += f"☁️ Небо: {WEATHER_CODES.get(c['code'], 'невідомо').split(' ')[0]}\n"
-    msg += f"💨 Вітер: {c['wind']} км/г {c['wind_dir']}\n"
+    msg += f"💨 Вітер: {c['wind']} км/г — {wind_description(c['wind'])} ({c['wind_dir']})\n"
     if c.get('humidity') is not None:
         msg += f"💧 Вологість: {c['humidity']}%\n"
     if wave_now is not None:
