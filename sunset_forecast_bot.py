@@ -257,12 +257,12 @@ def build_message(f: dict) -> str:
         msg += f"☀️ Дош: сухо ({f['rain_prob']}%)\n"
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     msg += (
-        f"🎨 Екран (сер./вис. хмарність): {round(f['screen_avg'])}% "
-        f"→ {round(f['score_screen'])}/100\n"
+        f"🎨 Екран (сер./вис.): внесок {round(f['score_screen'])}% "
+        f"(хмарність {round(f['screen_avg'])}%)\n"
     )
     msg += (
-        f"🔦 Прожектор (низька хмарність): {round(f['cloud_low'])}% "
-        f"→ {round(f['score_spotlight'])}/100\n"
+        f"🔦 Прожектор (низька): внесок {round(f['score_spotlight'])}% "
+        f"(хмарність {round(f['cloud_low'])}%)\n"
     )
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     msg += "🤖 @sunsetmalaga"
