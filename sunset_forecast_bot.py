@@ -379,7 +379,10 @@ def ai_sunset_comment(f: dict) -> str:
     text = _gemini_comment(prompt)
     if text:
         return text
-    print("Gemini повернув порожнє — пробуємо Groq (fallback).")
+    try:
+        print("Gemini empty - fallback to Groq")
+    except Exception:
+        pass
     return _groq_comment(prompt)
 
 
@@ -669,7 +672,7 @@ def main():
 
     # Надто пізно — прогноз на сьогодні вже завершено.
     if is_too_late(now, f["sunset_local"]):
-        print("Too late (за <1 год до заходу або після) — не постимо.")
+        print(f"Too late (less than {LAST_UPDATE_HOURS_BEFORE}h before sunset) - no post.")
         print("=== Done (too late) ===")
         return
 
@@ -683,7 +686,7 @@ def main():
     if not state.get("posted"):
         # Перший пост дня: щогодини перевіряємо, поки score не перевищить поріг.
         if index < MIN_INDEX_TO_NOTIFY:
-            print(f"First post: index {index} < {MIN_INDEX_TO_NOTIFY} — чекаємо далі.")
+            print(f"First post: index {index} < {MIN_INDEX_TO_NOTIFY} - waiting.")
             print("=== Done (waiting) ===")
             return
         msg = build_message(f, mode="first")
