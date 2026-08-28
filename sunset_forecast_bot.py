@@ -74,7 +74,8 @@ def fetch_point_a(lat, lon):
     url = (
         "https://api.open-meteo.com/v1/forecast"
         f"?latitude={lat}&longitude={lon}"
-        "&hourly=cloud_cover_low,cloud_cover_mid,cloud_cover_high"
+        "&hourly=cloud_cover_low,cloud_cover_mid,cloud_cover_high,"
+        "temperature_2m,precipitation_probability,wind_speed_10m"
         "&daily=sunset&timezone=UTC&forecast_days=2"
     )
     r = requests.get(url, timeout=15)
@@ -145,11 +146,15 @@ def groq_sunset_comment(f: dict) -> str:
         return ""
     prompt = (
         "Ти — короткий порадник фотографу заходу сонця в Малазі (Іспанія). "
-        "Опиши ОДНИМ простим реченням (до 25 слів), яка буде погода під час "
-        "заходу сонця і чого очікувати на небі. Дані: "
-        f"хмарність середнього+високого рівня {round(f['screen_avg'])}%, "
+        "Опиши ОДНИМ простим реченням (до 30 слів) погоду під час заходу "
+        "сонця і що вдягнути. Врахуй: "
+        f"температура {round(f['temp_avg'])}°C, "
+        f"вітер {round(f['wind_avg'])} км/год, "
+        f"ймовірність дощу {f['rain_prob']}%, "
+        f"хмарність {round(f['screen_avg'])}% (серед./вис.) і "
         f"низька хмарність на горизонті {round(f['cloud_low'])}%, "
-        f"індекс заходу {f['index']}% зі 100. Мова — українська, без канцеляриту."
+        f"індекс заходу {f['index']}% зі 100. "
+        "Мова — українська, без канцеляриту."
     )
     try:
         r = requests.post(
@@ -194,6 +199,12 @@ def get_forecast():
     cloud_mid = sum(mids) / len(mids)
     cloud_high = sum(highs) / len(highs)
 
+    temps = [data_a["hourly"]["temperature_2m"][i] for i in idxs_a]
+    winds = [data_a["hourly"]["wind_speed_10m"][i] for i in idxs_a]
+    temp_avg = sum(temps) / len(temps)
+    wind_avg = sum(winds) / len(winds)
+    rain_prob = max(data_a["hourly"]["precipitation_probability"][i] for i in idxs_a)
+
     hourly_b_times = data_b["hourly"]["time"]
     idxs_b = hour_indices_near(hourly_b_times, sunset_utc, AVG_HOURS)
     lows = [data_b["hourly"]["cloud_cover_low"][i] for i in idxs_b]
@@ -218,6 +229,9 @@ def get_forecast():
         "score_screen": s_screen,
         "score_spotlight": s_spot,
         "index": index,
+        "temp_avg": temp_avg,
+        "wind_avg": wind_avg,
+        "rain_prob": rain_prob,
     }
 
 
@@ -232,6 +246,15 @@ def build_message(f: dict) -> str:
         msg += f"{comment}\n\n"
     msg += f"🕐 Захід сонця: {f['sunset_local'].strftime('%H:%M')} (за Мадридом)\n"
     msg += f"🧭 Напрямок: {compass} ({round(f['azimuth'])}°)\n"
+    msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    msg += f"🌡️ Температура: {round(f['temp_avg'])}°C\n"
+    msg += f"💨 Вітер: {round(f['wind_avg'])} км/год\n"
+    if f["rain_prob"] >= 50:
+        msg += f"🌧️ Дош: ймовірний ({f['rain_prob']}%)\n"
+    elif f["rain_prob"] >= 20:
+        msg += f"🌦️ Дош: можливий ({f['rain_prob']}%)\n"
+    else:
+        msg += f"☀️ Дош: сухо ({f['rain_prob']}%)\n"
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     msg += (
         f"🎨 Екран (сер./вис. хмарність): {round(f['screen_avg'])}% "
