@@ -1,0 +1,26 @@
+name: Sunset Forecast
+
+on:
+  schedule:
+    # 13:00 UTC — запас 3–6+ год до заходу сонця цілий рік
+    - cron: '0 13 * * *'
+  workflow_dispatch:
+
+jobs:
+  forecast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install requests
+        run: pip install requests
+
+      - name: Run sunset forecast bot
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          SUNSET_CHANNEL_ID: ${{ secrets.SUNSET_CHANNEL_ID }}
+        run: python sunset_forecast_bot.py
