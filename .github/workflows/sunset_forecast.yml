@@ -23,4 +23,5 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           SUNSET_CHANNEL_ID: ${{ secrets.SUNSET_CHANNEL_ID }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python sunset_forecast_bot.py

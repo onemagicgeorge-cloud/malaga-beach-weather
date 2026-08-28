@@ -32,6 +32,7 @@ MIN_INDEX_TO_NOTIFY = 30
 
 TELEGRAM_TOKEN = os.environ.get("BOT_TOKEN", "")
 CHANNEL_ID = os.environ.get("SUNSET_CHANNEL_ID", "-1004312201455")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 MADRID_TZ = zoneinfo.ZoneInfo("Europe/Madrid")
 
@@ -138,6 +139,40 @@ def tier_for_index(index):
     return None, None
 
 
+def groq_sunset_comment(f: dict) -> str:
+    """Одне просте речення про погоду в Малазі під час заходу сонця."""
+    if not GROQ_API_KEY:
+        return ""
+    prompt = (
+        "Ти — короткий порадник фотографу заходу сонця в Малазі (Іспанія). "
+        "Опиши ОДНИМ простим реченням (до 25 слів), яка буде погода під час "
+        "заходу сонця і чого очікувати на небі. Дані: "
+        f"хмарність середнього+високого рівня {round(f['screen_avg'])}%, "
+        f"низька хмарність на горизонті {round(f['cloud_low'])}%, "
+        f"індекс заходу {f['index']}% зі 100. Мова — українська, без канцеляриту."
+    )
+    try:
+        r = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "openai/gpt-oss-20b",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 1024,
+                "temperature": 0.7,
+            },
+            timeout=20,
+        )
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        print(f"GROQ error: {e}")
+        return ""
+
+
 # ==================== ОСНОВНА ЛОГІКА ====================
 
 def get_forecast():
@@ -192,6 +227,9 @@ def build_message(f: dict) -> str:
 
     msg = f"{emoji} <b>Індекс заходу сонця: {f['index']}%</b>\n"
     msg += f"{text}\n\n"
+    comment = groq_sunset_comment(f)
+    if comment:
+        msg += f"{comment}\n\n"
     msg += f"🕐 Захід сонця: {f['sunset_local'].strftime('%H:%M')} (за Мадридом)\n"
     msg += f"🧭 Напрямок: {compass} ({round(f['azimuth'])}°)\n"
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
