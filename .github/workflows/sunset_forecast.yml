@@ -7,13 +7,14 @@ on:
     - cron: '0 9-20 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   forecast:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-        with:
-          token: ${{ secrets.GH_PAT }}
 
       - uses: actions/setup-python@v6
         with:
@@ -28,17 +29,16 @@ jobs:
           SUNSET_CHANNEL_ID: ${{ secrets.SUNSET_CHANNEL_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          GH_PAT: ${{ secrets.GH_PAT }}
         run: python sunset_forecast_bot.py
 
       - name: Push updated state
         if: always()
         env:
-          GH_PAT: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "onemagicgeorge-cloud"
           git config user.email "onemagicgeorge-cloud@users.noreply.github.com"
-          git remote set-url origin "https://x-access-token:${GH_PAT}@github.com/onemagicgeorge-cloud/malaga-beach-weather.git"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/onemagicgeorge-cloud/malaga-beach-weather.git"
           git add .sunset_state.json
           git commit -m "chore: update sunset state" --allow-empty -q || true
           git push origin HEAD:main
