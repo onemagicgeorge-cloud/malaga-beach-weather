@@ -9,9 +9,9 @@ import zoneinfo
 import requests
 
 # ==================== НАЛАШТУВАННЯ ====================
-# Точка А — звідки знімаєш захід сонця (набережна/порт у центрі Малаги).
-LATITUDE = 36.7209
-LONGITUDE = -4.4205
+# Точка А — звідки знімаєш захід сонця (набережна/порт у центрі Уельви).
+LATITUDE = 37.2600
+LONGITUDE = -6.9504
 
 # Відстані (км) вздовж променя в напрямку заходу для оцінки низької хмарності
 # на горизонті: ближня точка (база низьких хмар неподалік) і дальня точка
@@ -46,10 +46,43 @@ MADRID_TZ = zoneinfo.ZoneInfo("Europe/Madrid")
 
 # ==================== АЗИМУТ І ТОЧКИ ГОРИЗОНТУ ====================
 
-def sunset_azimuth(day_of_year: int) -> float:
-    """Азимут заходу сонця для Малаги (°), синусоїда за днем року.
-    271° на рівнодення, ~300° влітку, ~242° взимку."""
-    return 271 + 29 * math.sin(2 * math.pi * (day_of_year - 81) / 365)
+def sunset_azimuth(latitude_deg: float, longitude_deg: float, date: datetime.date) -> float:
+    """Географічно коректний азимут заходу сонця (° від Півночі за годинниковою стрілкою).
+
+    Розраховується локально математично на основі схилення Сонця та часового
+    кута на заході (з урахуванням атмосферної рефракції). Довгота не впливає
+    на азимут — приймається для повноти сигнатури.
+    """
+    lat = math.radians(latitude_deg)
+    n = date.timetuple().tm_yday
+
+    # Схилення Сонця (формула Спенсера, рад).
+    day_angle = 2 * math.pi * (n - 1) / 365
+    decl = (
+        0.006918
+        - 0.399912 * math.cos(day_angle)
+        + 0.070257 * math.sin(day_angle)
+        - 0.006758 * math.cos(2 * day_angle)
+        + 0.000907 * math.sin(2 * day_angle)
+        - 0.002697 * math.cos(3 * day_angle)
+        + 0.00148 * math.sin(3 * day_angle)
+    )
+
+    # Часовий кут на заході: alt = -0.833° (рефракція + радіус диска Сонця).
+    alt_set = math.radians(-0.833)
+    cos_h = (
+        math.sin(alt_set) - math.sin(lat) * math.sin(decl)
+    ) / (math.cos(lat) * math.cos(decl))
+    cos_h = max(-1.0, min(1.0, cos_h))
+    hour_angle = math.acos(cos_h)  # додатний кут для заходу
+
+    # Азимут заходу (від Півночі за годинниковою стрілкою).
+    sin_azi = -math.cos(decl) * math.sin(hour_angle) / math.cos(alt_set)
+    cos_azi = (
+        math.sin(decl) * math.cos(lat)
+        - math.cos(decl) * math.sin(lat) * math.cos(hour_angle)
+    ) / math.cos(alt_set)
+    return math.degrees(math.atan2(sin_azi, cos_azi)) % 360.0
 
 
 def destination_point(lat, lon, distance_km, bearing_deg):
@@ -309,7 +342,7 @@ def tier_label(idx):
 def _comment_prompt(f: dict) -> str:
     """Спільний промпт для обох провайдерів."""
     return (
-        "Ти — порадник фотографу заходу сонця в Малазі (Іспанія). "
+        "Ти — порадник фотографу заходу сонця в Уельві (Іспанія). "
         "Напиши ОДНЕ живе, змістовне речення (до 30 слів), яке підсумовує, "
         "чого очікувати ввечері і чи варто йти фотографувати. "
         "Врахуй фактично: "
@@ -389,8 +422,8 @@ def ai_sunset_comment(f: dict) -> str:
 # ==================== ОСНОВНА ЛОГІКА ====================
 
 def get_forecast():
-    day_of_year = datetime.datetime.now(MADRID_TZ).timetuple().tm_yday
-    azimuth = sunset_azimuth(day_of_year)
+    today = datetime.datetime.now(MADRID_TZ).date()
+    azimuth = sunset_azimuth(LATITUDE, LONGITUDE, today)
     lat_near, lon_near = destination_point(LATITUDE, LONGITUDE, HORIZON_NEAR_KM, azimuth)
     lat_far, lon_far = destination_point(LATITUDE, LONGITUDE, HORIZON_FAR_KM, azimuth)
 
@@ -488,7 +521,7 @@ def get_forecast():
     sunset_local = sunset_utc.replace(tzinfo=datetime.timezone.utc).astimezone(MADRID_TZ)
 
     return {
-        "day_of_year": day_of_year,
+        "day_of_year": today.timetuple().tm_yday,
         "azimuth": azimuth,
         "horizon_points": [(lat_near, lon_near), (lat_far, lon_far)],
         "sunset_local": sunset_local,
@@ -526,7 +559,7 @@ def golden_hour_block(f: dict) -> str:
     label = tier_label(f["index"])
     gold = gold_hour_desc(f)
 
-    msg = f"🌅 <b>ЗАХІД СОНЦЯ — МАЛАГА</b>\n\n"
+    msg = f"🌅 <b>ЗАХІД СОНЦЯ — УЕЛЬВА</b>\n\n"
     msg += f"<b>Шанс на красивий захід: {f['index']}% {label}</b>\n"
     msg += f"🕐 Захід: {f['sunset_local'].strftime('%H:%M')}\n"
     msg += f"🧭 Напрямок: {compass} ({round(f['azimuth'])}°)\n\n"
@@ -574,7 +607,7 @@ def build_message(f: dict, mode="first", prev_index=None) -> str:
 
     # Оновлення / відміна: короткий заголовок зі зміною + повне тіло.
     if mode == "cancel":
-        head = "🔄 <b>ОНОВЛЕННЯ ЗАХОДУ — МАЛАГА</b>\n\n"
+        head = "🔄 <b>ОНОВЛЕННЯ ЗАХОДУ — УЕЛЬВА</b>\n\n"
         if prev_index is not None and prev_index >= MIN_INDEX_TO_NOTIFY:
             head += f"⬇️ Шанс знизився: {prev_index}% → <b>{f['index']}%</b>\n"
         else:
@@ -583,7 +616,7 @@ def build_message(f: dict, mode="first", prev_index=None) -> str:
         return head + body
 
     # mode == 'update'
-    head = "🔄 <b>ОНОВЛЕННЯ ЗАХОДУ — МАЛАГА</b>\n\n"
+    head = "🔄 <b>ОНОВЛЕННЯ ЗАХОДУ — УЕЛЬВА</b>\n\n"
     if prev_index is not None:
         arrow = "📈" if f["index"] > prev_index else ("📉" if f["index"] < prev_index else "➖")
         head += f"{arrow} Шанс: {prev_index}% → <b>{f['index']}%</b>\n\n"
