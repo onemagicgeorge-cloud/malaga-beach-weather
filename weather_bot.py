@@ -7,18 +7,19 @@ import zoneinfo
 import math
 
 # ==================== НАЛАШТУВАННЯ ====================
-LATITUDE = 36.6630
-LONGITUDE = -4.4571
-BEACH_NAME = "Playa de Guadalmar"
+LATITUDE = 37.1919444444
+LONGITUDE = -6.9961111111
+BEACH_NAME = "Playa de Punta Umbría"
 
 # Координати для температури води (ближче до берега пляжу)
-WATER_LATITUDE = 36.655848
-WATER_LONGITUDE = -4.464546
+WATER_LATITUDE = 37.18
+WATER_LONGITUDE = -6.996
 # =====================================================
 
 TELEGRAM_TOKEN = os.environ.get("BOT_TOKEN", "")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 spain_tz = zoneinfo.ZoneInfo("Europe/Madrid")
 spain_now = datetime.datetime.now(spain_tz)
@@ -202,20 +203,18 @@ def alerts(uv, wind_speed, waves_desc, precip_prob, weather_code, alerts_list):
 # ==================== КОМЕНТАР ДО ПОГОДИ ====================
 
 
-def generate_commentary(d):
-    if not GROQ_API_KEY:
-        return _fallback_commentary(d)
-
+def _weather_comment_prompt(d):
+    """Спільний промпт для Gemini та Groq (той самий механізм, що й у sunset-бота)."""
     c = d["current"]
     hourly = d.get("hourly", [])
+    daily = d.get("daily", [])
     wave_now = d.get("wave_now")
-    wave_hourly = d.get("wave_hourly", [])
 
     max_temp_h = max((h.get("temp", 0) for h in hourly), default=c.get("temp", 20))
     max_uv_h = max((h.get("uv", 0) for h in hourly), default=d.get("uv_now", 0) or 0)
     max_wind_h = max((h.get("wind", 0) for h in hourly), default=c.get("wind", 0))
-    max_wave_h = max((w.get("height", 0) for w in wave_hourly if w.get("height") is not None), default=wave_now or 0)
     wind_now_desc = wind_description(c.get("wind"))
+    sky_now = WEATHER_CODES.get(c.get("code", 0), "невідомо").split(" ")[0]
 
     rain_hours = []
     for h in hourly[:12]:
@@ -223,38 +222,82 @@ def generate_commentary(d):
         if pp is not None and pp > 20:
             rain_hours.append(f"{h['hour']:02d}:00")
 
-    prompt = (
-        f"Одне речення українською (18-22 слова) про ЩО БУДЕ сьогодні на пляжі в Малазі. "
-        f"Не повторюй поточну погоду — лише зміни та очікування. "
-        f"Про вітер говори ТІЛЬКИ людським описом, який я даю, не вигадуй свій: "
-        f"«{wind_now_desc}» ({c.get('wind', '?')} км/г). "
-        f"Акценти: коли потепліє/похолодніє, вітер, дощ, хвилі, UV. "
-        f"Дані: зараз {c['temp']}°C, вода {d.get('water_temp', '?')}°C, "
-        f"хвилі {wave_now or '?'}м, макс {max_temp_h}°C, UV {max_uv_h}, вітер {max_wind_h}км/г"
-        + (f", дощ {', '.join(rain_hours[:2])}" if rain_hours else "")
-    )
+    tomorrow = daily[1] if len(daily) > 1 else {}
 
+    prompt = (
+        "Ти — друг, який живе в Punta Umbría (Іспанія), обожнює море і по-справжньому "
+        "розуміє погоду. Напиши живе, людяне повідомлення (2-4 речення) українською про те, "
+        "що буде сьогодні на пляжі Playa de Punta Umbría: якою буде погода, як вона "
+        "зміниться впродовж дня і чого очікувати завтра. Пиши тепло й невимушено, "
+        "як другу в месенджері, без канцеляриту й сухих переліків — вплітай цифри "
+        "в розповідь. Про вітер говори ТІЛЬКИ людським описом, який я даю: "
+        f"«{wind_now_desc}» ({c.get('wind', '?')} км/г). "
+        f"Факти: зараз {sky_now} {c['temp']}°C, вода {d.get('water_temp', '?')}°C, "
+        f"хвилі {wave_now or '?'}м, сьогодні до {max_temp_h}°C, UV до {max_uv_h}, "
+        f"вітер до {max_wind_h} км/г"
+        + (f", дощ {', '.join(rain_hours[:2])}" if rain_hours else "")
+        + (f", завтра {tomorrow.get('min', '?')}…{tomorrow.get('max', '?')}°C" if tomorrow else "")
+    )
+    return prompt
+
+
+def _gemini_comment(prompt):
+    """Google Gemini 2.5-flash (та сама модель і механізм, що й у sunset-бота)."""
+    if not GEMINI_API_KEY:
+        return ""
     try:
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": "openai/gpt-oss-20b",
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.5,
-            "max_tokens": 1024
-        }
+        r = requests.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            "gemini-2.5-flash:generateContent"
+            f"?key={GEMINI_API_KEY}",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0.7, "maxOutputTokens": 4096, "stopSequences": []},
+            },
+            timeout=25,
+        )
+        r.raise_for_status()
+        parts = r.json()["candidates"][0]["content"]["parts"]
+        return parts[0]["text"].strip()
+    except Exception as e:
+        print(f"Gemini commentary error: {e}")
+        return ""
+
+
+def _groq_comment(prompt):
+    """Groq як запасний варіант, якщо Gemini недоступний."""
+    if not GROQ_API_KEY:
+        return ""
+    try:
         r = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
-            headers=headers, json=payload, timeout=15
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "model": "openai/gpt-oss-20b",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 300,
+                "temperature": 0.7,
+            },
+            timeout=20,
         )
-        if r.status_code == 200:
-            result = r.json()["choices"][0]["message"]["content"].strip()
-            if result:
-                return result
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        print(f"GROQ commentary error: {e}")
+        print(f"Groq commentary error: {e}")
+        return ""
+
+
+def generate_commentary(d):
+    prompt = _weather_comment_prompt(d)
+
+    text = _gemini_comment(prompt)
+    if text:
+        return text
+
+    text = _groq_comment(prompt)
+    if text:
+        return text
 
     return _fallback_commentary(d)
 
