@@ -70,27 +70,27 @@ WEATHER_CODES_SHORT = {
 }
 
 WEATHER_CODES = {
-    0: "Ясно ☀️", 1: "Малохмарно 🌤", 2: "Хмарно ⛅",
-    3: "Похмуро ☁️", 45: "Туман 🌫", 48: "Паморозь 🌫",
-    51: "Легка мряка 🌦", 53: "Помірна мряка 🌧", 55: "Сильна мряка 🌧",
-    56: "Крижана мряка 🌧", 57: "Сильна крижана мряка 🌧",
-    61: "Невеликий дощ 🌧", 63: "Помірний дощ 🌧", 65: "Сильний дощ 🌧",
-    66: "Крижаний дощ 🌧", 67: "Сильний крижаний дощ 🌧",
-    71: "Невеликий сніг ❄️", 73: "Помірний сніг ❄️", 75: "Сильний сніг ❄️",
-    77: "Сніг з дощем ❄️",
-    80: "Зливовий дощ 🌧", 81: "Помірна злива 🌧", 82: "Сильна злива 🌧",
-    85: "Снігова злива ❄️", 86: "Сильна снігова злива ❄️",
-    95: "Гроза ⛈", 96: "Гроза з градом ⛈", 99: "Сильна гроза з градом ⛈"
+    0: "Despejado ☀️", 1: "Poco nuboso 🌤", 2: "Nublado ⛅",
+    3: "Cubierto ☁️", 45: "Niebla 🌫", 48: "Niebla con escarcha 🌫",
+    51: "Llovizna débil 🌦", 53: "Llovizna moderada 🌧", 55: "Llovizna intensa 🌧",
+    56: "Llovizna helada 🌧", 57: "Llovizna helada intensa 🌧",
+    61: "Lluvia débil 🌧", 63: "Lluvia moderada 🌧", 65: "Lluvia intensa 🌧",
+    66: "Lluvia helada 🌧", 67: "Lluvia helada intensa 🌧",
+    71: "Nieve débil ❄️", 73: "Nieve moderada ❄️", 75: "Nieve intensa ❄️",
+    77: "Aguanieve ❄️",
+    80: "Chubascos 🌧", 81: "Chubascos moderados 🌧", 82: "Chubascos fuertes 🌧",
+    85: "Chubascos de nieve ❄️", 86: "Chubascos de nieve fuertes ❄️",
+    95: "Tormenta ⛈", 96: "Tormenta con granizo ⛈", 99: "Tormenta fuerte con granizo ⛈"
 }
 
-DAYS_UA = {
-    0: "Пн", 1: "Вт", 2: "Ср", 3: "Чт", 4: "Пт", 5: "Сб", 6: "Нд"
+DAYS_ES = {
+    0: "Lun", 1: "Mar", 2: "Mié", 3: "Jue", 4: "Vie", 5: "Sáb", 6: "Dom"
 }
 
 WIND_DIRECTIONS = [
-    (0, 22.5, "Пн"), (22.5, 67.5, "ПнСх"), (67.5, 112.5, "Сх"),
-    (112.5, 157.5, "ПдСх"), (157.5, 202.5, "Пд"), (202.5, 247.5, "ПдЗх"),
-    (247.5, 292.5, "Зх"), (292.5, 337.5, "ПнЗх"), (337.5, 360.1, "Пн")
+    (0, 22.5, "N"), (22.5, 67.5, "NE"), (67.5, 112.5, "E"),
+    (112.5, 157.5, "SE"), (157.5, 202.5, "S"), (202.5, 247.5, "SO"),
+    (247.5, 292.5, "O"), (292.5, 337.5, "NO"), (337.5, 360.1, "N")
 ]
 
 
@@ -106,7 +106,7 @@ def wind_direction(deg):
     for lo, hi, label in WIND_DIRECTIONS:
         if lo <= deg < hi:
             return label
-    return "Пн"
+    return "N"
 
 
 def wind_description(speed):
@@ -114,16 +114,16 @@ def wind_description(speed):
     if speed is None:
         return ""
     if speed < 5:
-        return "штиль"
+        return "calma"
     if speed < 10:
-        return "ледь помітний подих"
+        return "brisa suave"
     if speed < 20:
-        return "відчутний вітерець"
+        return "brisa perceptible"
     if speed < 30:
-        return "помітно дме"
+        return "viento notable"
     if speed < 40:
-        return "міцний вітер"
-    return "сильний вітер"
+        return "viento fuerte"
+    return "viento muy fuerte"
 
 
 def beach_safety_score(uv, wind_speed, waves_desc, precip_prob):
@@ -152,10 +152,10 @@ def beach_safety_score(uv, wind_speed, waves_desc, precip_prob):
             score -= 5
 
     if waves_desc:
-        if "сильні" in waves_desc or "fuerte" in waves_desc:
+        if "fuertes" in waves_desc:
             score -= 25
             reasons.append("high_waves")
-        elif "помірні" in waves_desc or "moderado" in waves_desc:
+        elif "moderadas" in waves_desc:
             score -= 10
 
     if precip_prob is not None and precip_prob >= 70:
@@ -166,38 +166,38 @@ def beach_safety_score(uv, wind_speed, waves_desc, precip_prob):
 
     if score >= 80:
         emoji = "🟢"
-        label = "Ідеально для пляжу!"
+        label = "¡Ideal para la playa!"
     elif score >= 60:
         emoji = "🟡"
-        label = "Добре, але будь обережний"
+        label = "Bien, pero con precaución"
     elif score >= 40:
         emoji = "🟠"
-        label = "Не ідеально, краще обмежити час"
+        label = "No es ideal, mejor limitar el tiempo"
     else:
         emoji = "🔴"
-        label = "Краще не йти на пляж"
+        label = "Mejor no ir a la playa"
 
     return score, emoji, label, reasons
 
 
 def alerts(uv, wind_speed, waves_desc, precip_prob, weather_code, alerts_list):
     if uv is not None and uv >= 8:
-        alerts_list.append(f"⚠️ ВИСОКИЙ UV ({uv}) — нанеси сонцезахисний крем SPF50+!")
+        alerts_list.append(f"⚠️ UV ALTO ({uv}) — ¡aplica protector solar SPF50+!")
 
     if wind_speed is not None and wind_speed >= 40:
-        alerts_list.append(f"⚠️ СИЛЬНИЙ ВІТЕР ({wind_speed} км/г) — небезпечно для купання!")
+        alerts_list.append(f"⚠️ VIENTO FUERTE ({wind_speed} km/h) — ¡peligroso para el baño!")
 
-    if waves_desc and ("сильні" in waves_desc or "fuerte" in waves_desc):
-        alerts_list.append("⚠️ ВИСОКІ ХВИЛІ — купання небезпечне!")
+    if waves_desc and ("fuertes" in waves_desc):
+        alerts_list.append("⚠️ OLAS ALTAS — ¡el baño es peligroso!")
 
     if weather_code is not None and weather_code >= 95:
-        alerts_list.append("⛈ ГРОЗА — негайно залиш пляж!")
+        alerts_list.append("⛈ TORMENTA — ¡sal de la playa inmediatamente!")
 
     if precip_prob is not None and precip_prob >= 80:
-        alerts_list.append(f"🌧 ВИСОКА ЙМОВІРНІСТЬ ДОЩУ ({precip_prob}%)")
+        alerts_list.append(f"🌧 ALTA PROBABILIDAD DE LLUVIA ({precip_prob}%)")
 
     if weather_code is not None and weather_code in (45, 48):
-        alerts_list.append("🌫 ТУМАН — обережно на воді")
+        alerts_list.append("🌫 NIEBLA — ten cuidado en el agua")
 
 
 # ==================== КОМЕНТАР ДО ПОГОДИ ====================
@@ -214,7 +214,7 @@ def _weather_comment_prompt(d):
     max_uv_h = max((h.get("uv", 0) for h in hourly), default=d.get("uv_now", 0) or 0)
     max_wind_h = max((h.get("wind", 0) for h in hourly), default=c.get("wind", 0))
     wind_now_desc = wind_description(c.get("wind"))
-    sky_now = WEATHER_CODES.get(c.get("code", 0), "невідомо").split(" ")[0]
+    sky_now = sky_label(c.get("code", 0))
 
     rain_hours = []
     for h in hourly[:12]:
@@ -225,18 +225,18 @@ def _weather_comment_prompt(d):
     tomorrow = daily[1] if len(daily) > 1 else {}
 
     prompt = (
-        "Ти — друг, який живе в Punta Umbría (Іспанія), обожнює море і по-справжньому "
-        "розуміє погоду. Напиши живе, людяне повідомлення (2-4 речення) українською про те, "
-        "що буде сьогодні на пляжі Playa de Punta Umbría: якою буде погода, як вона "
-        "зміниться впродовж дня і чого очікувати завтра. Пиши тепло й невимушено, "
-        "як другу в месенджері, без канцеляриту й сухих переліків — вплітай цифри "
-        "в розповідь. Про вітер говори ТІЛЬКИ людським описом, який я даю: "
-        f"«{wind_now_desc}» ({c.get('wind', '?')} км/г). "
-        f"Факти: зараз {sky_now} {c['temp']}°C, вода {d.get('water_temp', '?')}°C, "
-        f"хвилі {wave_now or '?'}м, сьогодні до {max_temp_h}°C, UV до {max_uv_h}, "
-        f"вітер до {max_wind_h} км/г"
-        + (f", дощ {', '.join(rain_hours[:2])}" if rain_hours else "")
-        + (f", завтра {tomorrow.get('min', '?')}…{tomorrow.get('max', '?')}°C" if tomorrow else "")
+        "Eres un amigo que vive en Punta Umbría (España), adora el mar y de verdad "
+        "entiende del tiempo. Escribe un mensaje vivo y humano (2-4 frases) EN ESPAÑOL "
+        "sobre lo que pasará hoy en la playa Playa de Punta Umbría: cómo estará el tiempo, "
+        "cómo cambiará a lo largo del día y qué esperar mañana. Escribe con calidez y "
+        "naturalidad, como a un amigo por chat, sin lenguaje burocrático ni listas secas, "
+        "integrando los datos en la narración. Sobre el viento habla SOLO con la descripción "
+        f"humana que te doy: «{wind_now_desc}» ({c.get('wind', '?')} km/h). "
+        f"Datos: ahora {sky_now} {c['temp']}°C, agua {d.get('water_temp', '?')}°C, "
+        f"olas {wave_now or '?'}m, hoy hasta {max_temp_h}°C, UV hasta {max_uv_h}, "
+        f"viento hasta {max_wind_h} km/h"
+        + (f", lluvia {', '.join(rain_hours[:2])}" if rain_hours else "")
+        + (f", mañana {tomorrow.get('min', '?')}…{tomorrow.get('max', '?')}°C" if tomorrow else "")
     )
     return prompt
 
@@ -311,15 +311,15 @@ def _fallback_commentary(d):
     hourly = d.get("hourly", [])
     wave_hourly = d.get("wave_hourly", [])
 
-    sky_desc = WEATHER_CODES.get(code, "невідомо").split(" ")[0]
+    sky_desc = sky_label(code)
     max_temp_h = max((h.get("temp", 0) for h in hourly), default=temp)
-    wave_desc = wave_description(wave_now) if wave_now else "невідомо"
+    wave_desc = wave_description(wave_now) if wave_now else "desconocido"
 
-    parts = [f"Зараз {sky_desc.lower()}, {temp}°C, вітер {wind} км/г"]
+    parts = [f"Ahora {sky_desc.lower()}, {temp}°C, viento {wind} km/h"]
     if wave_now is not None:
-        parts.append(f"хвилі {wave_desc} ({wave_now} м)")
+        parts.append(f"Olas {wave_desc} ({wave_now} m)")
     if max_temp_h > temp + 2:
-        parts.append(f"потепліє до {max_temp_h}°C")
+        parts.append(f"Sube hasta {max_temp_h}°C")
     return ". ".join(parts) + "."
 
 
@@ -382,13 +382,13 @@ def wave_description(height):
     if height is None:
         return None
     if height < 0.5:
-        return "слабкі"
+        return "suaves"
     elif height < 1.0:
-        return "помірні"
+        return "moderadas"
     elif height < 2.0:
-        return "сильні"
+        return "fuertes"
     else:
-        return "дуже сильні"
+        return "muy fuertes"
 
 
 def get_all_data():
@@ -508,7 +508,7 @@ def get_all_data():
             for i in range(len(daily_dates)):
                 date = daily_dates[i]
                 dt = datetime.datetime.strptime(date, "%Y-%m-%d")
-                dow = DAYS_UA[dt.weekday()]
+                dow = DAYS_ES[dt.weekday()]
 
                 sunrise_str = None
                 sunset_str = None
@@ -574,19 +574,24 @@ def get_all_data():
     return None
 
 
+def sky_label(code):
+    label = WEATHER_CODES.get(code, "Desconocido")
+    return label.rsplit(" ", 1)[0]
+
+
 def uv_label(val):
     if val is None:
         return ""
     if val <= 2:
-        return f"{val} (низький)"
+        return f"{val} (bajo)"
     elif val <= 5:
-        return f"{val} (помірний)"
+        return f"{val} (moderado)"
     elif val <= 7:
-        return f"{val} (високий)"
+        return f"{val} (alto)"
     elif val <= 10:
-        return f"{val} (дуже високий)"
+        return f"{val} (muy alto)"
     else:
-        return f"{val} (екстремальний)"
+        return f"{val} (extremo)"
 
 
 def build_message(d):
@@ -604,35 +609,35 @@ def build_message(d):
     msg = f"🌊 {BEACH_NAME} — {date_str}\n\n"
 
     # === ПОГОДА ЗАРАЗ ===
-    msg += "🔵 Погода зараз:\n"
-    msg += f"🌡 Температура: {c['temp']}°C (відчувається як {c.get('apparent', c['temp'])}°C)\n"
-    msg += f"☁️ Небо: {WEATHER_CODES.get(c['code'], 'невідомо').split(' ')[0]}\n"
-    msg += f"💨 Вітер: {c['wind']} км/г — {wind_description(c['wind'])} ({c['wind_dir']})\n"
+    msg += "🔵 El tiempo ahora:\n"
+    msg += f"🌡 Temperatura: {c['temp']}°C (sensación de {c.get('apparent', c['temp'])}°C)\n"
+    msg += f"☁️ Cielo: {sky_label(c['code'])}\n"
+    msg += f"💨 Viento: {c['wind']} km/h — {wind_description(c['wind'])} ({c['wind_dir']})\n"
     if c.get('humidity') is not None:
-        msg += f"💧 Вологість: {c['humidity']}%\n"
+        msg += f"💧 Humedad: {c['humidity']}%\n"
     if wave_now is not None:
-        msg += f"🌊 Хвилі: {wave_now} м\n"
+        msg += f"🌊 Olas: {wave_now} m\n"
     if water_val is not None:
-        msg += f"💧 Вода: {water_val}°C\n"
+        msg += f"💧 Agua: {water_val}°C\n"
     if uv_val is not None:
-        msg += f"☀️ UV-індекс: {uv_label(uv_val)}\n"
+        msg += f"☀️ Índice UV: {uv_label(uv_val)}\n"
     if precip_val is not None:
-        rain_status = "без опадів" if precip_val < 20 else "можливий дощ" if precip_val < 50 else "ймовірний дощ"
-        msg += f"🌧 Опади: {precip_val}% ({rain_status})\n"
+        rain_status = "sin lluvia" if precip_val < 20 else "posible lluvia" if precip_val < 50 else "lluvia probable"
+        msg += f"🌧 Precipitación: {precip_val}% ({rain_status})\n"
 
     # === РЕЙТИНГ БЕЗПЕКИ ===
     wave_desc = wave_description(wave_now)
     safety_score, safety_emoji, safety_label, _ = beach_safety_score(
         uv_val, c['wind'], wave_desc, precip_val
     )
-    msg += f"🟢 Рейтинг пляжу: {safety_score}/100 ({safety_label})\n\n"
+    msg += f"🟢 Valoración de la playa: {safety_score}/100 ({safety_label})\n\n"
 
     # === КОРОТКО ПРО ПОГОДУ ===
     commentary = generate_commentary(d)
-    msg += f"💡 Коротко про погоду:\n{commentary}\n\n"
+    msg += f"💡 En resumen:\n{commentary}\n\n"
 
     # === ПОГОДИННИЙ ПРОГНОЗ ===
-    msg += "📋 Погодинний прогноз:\n"
+    msg += "📋 Pronóstico por horas:\n"
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
 
     # З'єднуємо погодинні дані з хвилями
@@ -651,7 +656,7 @@ def build_message(d):
         msg += f"{h['hour']:02d}:00 │ {h['temp']}° {hc} │ 💨{wind_str} │ {wave_str} │ UV {h.get('uv', '?')}\n"
 
     # === 7-ДЕННИЙ ПРОГНОЗ ===
-    msg += "\n📅 Прогноз на найближчі 7 днів (від сьогодні):\n"
+    msg += "\n📅 Pronóstico de los próximos 7 días (desde hoy):\n"
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     for day in d["daily"]:
         dc = WEATHER_CODES_SHORT.get(day["code"], "?")
