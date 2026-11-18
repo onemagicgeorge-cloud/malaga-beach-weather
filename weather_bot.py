@@ -326,9 +326,27 @@ def _fallback_commentary(d):
 # ==================== КІНЕЦЬ ====================
 
 
+
+def http_get_with_retry(url, timeout=30, retries=3, backoff_factor=2):
+    import time
+    import requests
+    for attempt in range(1, retries + 1):
+        try:
+            r = requests.get(url, timeout=timeout)
+            r.raise_for_status()
+            return r
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError, requests.exceptions.HTTPError) as e:
+            print(f"Attempt {attempt}/{retries} failed for {url}: {e}")
+            if attempt == retries:
+                raise
+            sleep_time = backoff_factor ** (attempt - 1)
+            time.sleep(sleep_time)
+    return None
+
+
 def get_marine_data():
     try:
-        r = requests.get(MARINE_URL, timeout=15)
+        r = http_get_with_retry(MARINE_URL, timeout=30)
         r.raise_for_status()
         j = r.json()
         hourly = j.get("hourly", {})
@@ -394,7 +412,7 @@ def wave_description(height):
 def get_all_data():
     for attempt in range(2):
         try:
-            r = requests.get(OPEN_METEO_URL, timeout=15)
+            r = http_get_with_retry(OPEN_METEO_URL, timeout=30)
             r.raise_for_status()
             j = r.json()
 
@@ -402,7 +420,7 @@ def get_all_data():
             water_times = []
             water_sea_temps = []
             try:
-                wr = requests.get(WATER_URL, timeout=15)
+                wr = http_get_with_retry(WATER_URL, timeout=30)
                 wr.raise_for_status()
                 wj = wr.json()
                 water_times = wj.get("hourly", {}).get("time", [])
