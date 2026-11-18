@@ -671,7 +671,7 @@ def build_message(d):
         wh = wave_by_hour.get(h["hour"], {}).get("height")
         wave_str = f"🌊{wh:.1f}" if wh is not None else "🌊 —"
 
-        msg += f"{h['hour']:02d}:00 │ {h['temp']}° {hc} │ 💨{wind_str} │ {wave_str} │ UV {h.get('uv', '?')}\n"
+        msg += f"{h['hour']:02d}:00 │ {h['temp']}°{hc}│ 💨{wind_str} │ {wave_str}│UV{h.get('uv', '?')}\n"
 
     # === 7-ДЕННИЙ ПРОГНОЗ ===
     msg += "\n📅 Pronóstico de los próximos 7 días (desde hoy):\n"
@@ -680,7 +680,7 @@ def build_message(d):
         dc = WEATHER_CODES_SHORT.get(day["code"], "?")
         wind_str = f"{day['wind_max']:>2}" if day.get('wind_max') is not None else " ?"
         water_str = f"💧{day['water_temp']}°" if day.get('water_temp') is not None else ""
-        msg += f"{day['day']} │ {day['min']}°/{day['max']}° │ {dc} │ 💨{wind_str} │ UV {day.get('uv_max', '?')} {water_str}\n"
+        msg += f"{day['day']} │ {day['min']}°/{day['max']}°│ {dc}│💨{wind_str}│UV{day.get('uv_max', '?')} {water_str}\n"
 
     msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     msg += "🤖 @malaga_beach_weather"
