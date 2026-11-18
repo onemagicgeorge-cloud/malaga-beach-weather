@@ -226,7 +226,7 @@ def _weather_comment_prompt(d):
 
     prompt = (
         "Eres un amigo que vive en Punta Umbría (España), adora el mar y de verdad "
-        "entiende del tiempo. Escribe un mensaje vivo y humano (2-4 frases) EN ESPAÑOL "
+        "entiende del tiempo. Escribe un mensaje vivo y humano (2-4 frases) EN ESPAÑOL sin saludos iniciales (nada de ¡Qué pasa!, Hola, etc., ve directo al grano) "
         "sobre lo que pasará hoy en la playa Playa de Punta Umbría: cómo estará el tiempo, "
         "cómo cambiará a lo largo del día y qué esperar mañana. Escribe con calidez y "
         "naturalidad, como a un amigo por chat, sin lenguaje burocrático ni listas secas, "
